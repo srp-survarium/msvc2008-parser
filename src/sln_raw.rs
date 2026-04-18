@@ -3,11 +3,18 @@ use nom::{
     character::complete::digit1,
     combinator::{map_res, opt},
     error::{ContextError, ParseError},
+    multi::{many, many0},
     number::complete::u8 as parse_u8,
     IResult, Parser,
 };
 use sha1::Sha1;
 
+pub struct Sln {
+    pub projects: Vec<Project>,
+    pub global: Global,
+}
+
+#[derive(Default)]
 pub struct Project {
     pub up_hash: Sha1,
     pub name: String,
@@ -17,6 +24,7 @@ pub struct Project {
     pub section_dependencies: Option<SectionDependencies>,
 }
 
+#[derive(Default)]
 pub struct SectionDependencies {
     pub deps: Vec<SectionDependency>,
 }
@@ -30,6 +38,7 @@ pub struct SectionDependency {
 //
 //
 
+#[derive(Default)]
 pub struct Global {
     pub pre_sln_platforms: Option<SolutionConfigurationPlatforms>,
     pub post_proj_platforms: Option<ProjectConfigurationPlatforms>,
@@ -63,8 +72,8 @@ pub struct NestedProjects {
     pub to: Sha1,
 }
 
-impl Project {
-    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+impl Sln {
+    pub fn parse<'a>(i: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
         let (i, _) = opt(tag("\u{FEFF}")).parse(i)?;
 
         let (i, _) = sp(i)?;
@@ -79,20 +88,39 @@ impl Project {
             panic!("Unknown VS version: {vs_version}");
         }
 
-        // many_of project
-        // single global
-        todo!()
+        let (i, _) = sp(i)?;
+        let (i, projects) = many0(Project::parse).parse(i)?;
+
+        let (i, _) = sp(i)?;
+        let (_, global) = Global::parse(i)?;
+
+        Ok(Self { projects, global })
     }
 }
 
-fn vs_version<'a>(i: &'a str) -> nom::IResult<&'a str, u16> {
+impl Project {
+    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+        let (i, _) = tag("Project").parse(i)?;
+        // ..
+        let (i, _) = tag("EndProject").parse(i)?;
+
+        Ok((i, Self::default()))
+    }
+}
+impl Global {
+    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+        Ok((i, Self::default()))
+    }
+}
+
+fn vs_version(i: &str) -> nom::IResult<&str, u16> {
     let (i, _) = tag("# Visual Studio ").parse(i)?;
     let (i, version) = map_res(digit1, |res| str::parse::<u16>(res)).parse(i)?;
 
     Ok((i, version))
 }
 
-fn sln_version<'a>(i: &'a str) -> nom::IResult<&'a str, (u8, u8)> {
+fn sln_version(i: &str) -> nom::IResult<&str, (u8, u8)> {
     let (i, _) = tag("Microsoft Visual Studio Solution File, Format Version ").parse(i)?;
     let (i, major_version) = map_res(digit1, |res| str::parse::<u8>(res)).parse(i)?;
     let (i, _) = tag(".").parse(i)?;
@@ -101,7 +129,7 @@ fn sln_version<'a>(i: &'a str) -> nom::IResult<&'a str, (u8, u8)> {
     Ok((i, (major_version, minor_version)))
 }
 
-fn sp<'a>(i: &'a str) -> IResult<&'a str, &'a str> {
+fn sp(i: &str) -> nom::IResult<&str, &str> {
     let chars = " \t\r\n";
 
     take_while(move |c| chars.contains(c)).parse(i)

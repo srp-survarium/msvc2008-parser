@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use crate::sln_raw::Project;
+use crate::sln_raw::Sln;
 
 mod sln_raw;
 
 const SLN: &str = include_str!("../resources/vostok.sln");
 
 fn main() {
-    Project::parse(SLN).unwrap();
+    Sln::parse(SLN).unwrap();
 }
