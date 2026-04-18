@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 
+use crate::sln_raw::Project;
+
 mod sln_raw;
 
+const SLN: &str = include_str!("../resources/vostok.sln");
+
 fn main() {
-    println!("Hello, world!");
+    Project::parse(SLN).unwrap();
 }

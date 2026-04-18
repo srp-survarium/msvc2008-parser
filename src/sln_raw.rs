@@ -1,7 +1,7 @@
 use nom::{
     bytes::complete::{tag, take_while},
     character::complete::digit1,
-    combinator::map_res,
+    combinator::{map_res, opt},
     error::{ContextError, ParseError},
     number::complete::u8 as parse_u8,
     IResult, Parser,
@@ -65,6 +65,8 @@ pub struct NestedProjects {
 
 impl Project {
     pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+        let (i, _) = opt(tag("\u{FEFF}")).parse(i)?;
+
         let (i, _) = sp(i)?;
         let (i, (major_version, minor_version)) = sln_version(i)?;
         if major_version != 10 && minor_version != 0 {
