@@ -79,7 +79,6 @@ impl Project {
             panic!("Unknown VS version: {vs_version}");
         }
 
-        // vs version
         // many_of project
         // single global
         todo!()
@@ -106,4 +105,15 @@ fn sp<'a>(i: &'a str) -> IResult<&'a str, &'a str> {
     let chars = " \t\r\n";
 
     take_while(move |c| chars.contains(c)).parse(i)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parses_sln_version() {
+        let input = "Microsoft Visual Studio Solution File, Format Version 12.13";
+        assert_eq!(sln_version(input).unwrap().1, (12, 13));
+    }
 }
