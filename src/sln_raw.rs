@@ -33,7 +33,6 @@ pub struct SectionDependencies {
 pub struct SectionDependency {
     pub from: Uuid,
     pub to: Uuid,
-    // should be equal?
 }
 
 //
@@ -43,8 +42,8 @@ pub struct SectionDependency {
 pub struct Global {
     pub sln_platforms: SolutionConfigurationPlatforms, // pre
     pub proj_cfg_platforms: ProjectConfigurationPlatforms, // post
-    pub sln_properties: SolutionProperties, // pre
-    pub nested_projects: NestedProjects, // pre
+    pub sln_properties: SolutionProperties,            // pre
+    pub nested_projects: NestedProjects,               // pre
 }
 
 #[derive(Default, Debug)]
@@ -202,12 +201,15 @@ impl Global {
         let (i, _) = tag("EndGlobal").parse(i)?;
         let (i, _) = sp(i)?;
 
-        Ok((i, Self {
-            sln_platforms,
-            proj_cfg_platforms,
-            sln_properties,
-            nested_projects,
-        }))
+        Ok((
+            i,
+            Self {
+                sln_platforms,
+                proj_cfg_platforms,
+                sln_properties,
+                nested_projects,
+            },
+        ))
     }
 }
 
@@ -227,7 +229,6 @@ impl SolutionConfigurationPlatforms {
 
 impl SolutionConfigurationPlatform {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
-
         let (i, platform_lhs) = ConfigurationPlatform::parse(i)?;
         let (i, _) = charsep('=').parse(i)?;
         let (i, platform_rhs) = ConfigurationPlatform::parse(i)?;
@@ -235,7 +236,12 @@ impl SolutionConfigurationPlatform {
 
         assert_eq!(platform_lhs, platform_rhs);
 
-        Ok((i, Self { platform: platform_lhs }))
+        Ok((
+            i,
+            Self {
+                platform: platform_lhs,
+            },
+        ))
     }
 }
 
@@ -283,7 +289,7 @@ impl ProjectConfigurationPlatform {
     }
 
     // {A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.Build.0 = Master Gold|Win32
-    fn is_enabled_parser<'a>(&'a self) ->  impl FnMut(&str) -> nom::IResult<&str, ()> + 'a {
+    fn is_enabled_parser<'a>(&'a self) -> impl FnMut(&str) -> nom::IResult<&str, ()> + 'a {
         |i: &str| {
             let (i, uuid) = parse_uuid_raw(i)?;
             let (i, _) = char('.').parse(i)?;
@@ -304,16 +310,18 @@ impl ProjectConfigurationPlatform {
 }
 impl ConfigurationPlatform {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
-
         let (i, build_kind) = take_until1("|").parse(i)?;
         let (i, _) = char('|').parse(i)?;
         let (i, platform_name) = Self::take_until1_platform_sep(i)?;
         let (i, _) = sp(i)?;
 
-        Ok((i, Self {
-            build_kind: build_kind.to_string(),
-            platform_name: platform_name.to_string(),
-        }))
+        Ok((
+            i,
+            Self {
+                build_kind: build_kind.to_string(),
+                platform_name: platform_name.to_string(),
+            },
+        ))
     }
 
     fn take_until1_platform_sep(i: &str) -> nom::IResult<&str, &str> {
@@ -332,10 +340,14 @@ impl SolutionProperties {
         let (i, _) = sp(i)?;
         let (i, _) = tag("EndGlobalSection").parse(i)?;
         let (i, _) = sp(i)?;
-        Ok((i, Self { hide_solution_node: false}))
+        Ok((
+            i,
+            Self {
+                hide_solution_node: false,
+            },
+        ))
     }
 }
-
 
 impl NestedProjects {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
@@ -398,16 +410,16 @@ fn parse_string(i: &str) -> nom::IResult<&str, &str> {
 
 fn vs_version(i: &str) -> nom::IResult<&str, u16> {
     let (i, _) = tag("# Visual Studio ").parse(i)?;
-    let (i, version) = map_res(digit1, |res| str::parse::<u16>(res)).parse(i)?;
+    let (i, version) = map_res(digit1, str::parse::<u16>).parse(i)?;
 
     Ok((i, version))
 }
 
 fn sln_version(i: &str) -> nom::IResult<&str, (u8, u8)> {
     let (i, _) = tag("Microsoft Visual Studio Solution File, Format Version ").parse(i)?;
-    let (i, major_version) = map_res(digit1, |res| str::parse::<u8>(res)).parse(i)?;
+    let (i, major_version) = map_res(digit1, str::parse::<u8>).parse(i)?;
     let (i, _) = tag(".").parse(i)?;
-    let (i, minor_version) = map_res(digit1, |res| str::parse::<u8>(res)).parse(i)?;
+    let (i, minor_version) = map_res(digit1, str::parse::<u8>).parse(i)?;
 
     Ok((i, (major_version, minor_version)))
 }
@@ -483,9 +495,9 @@ EndProject
     fn parse_configuration_platform() {
         let input = r#"
 		Master Gold|Win32 = Master Gold|Win32
-        "#.trim();
+        "#
+        .trim();
         let (i, conf) = SolutionConfigurationPlatform::parse(input).unwrap();
-
 
         assert_eq!(i, "");
         assert_eq!(conf.platform.build_kind, "Master Gold");
@@ -501,7 +513,8 @@ EndProject
             	{E7FF01A9-20EA-431D-8EE5-71631F8C05A5}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
             	{E7FF01A9-20EA-431D-8EE5-71631F8C05A5}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
             EndGlobalSection
-        "#.trim();
+        "#
+        .trim();
         let (i, conf) = ProjectConfigurationPlatforms::parse(input).unwrap();
 
         assert_eq!(i, "");
