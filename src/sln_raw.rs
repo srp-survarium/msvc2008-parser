@@ -1,13 +1,12 @@
 use nom::{
-    bytes::complete::{tag, take_while},
-    character::complete::digit1,
+    bytes::complete::{tag, take_until, take_while},
+    character::complete::{char, digit1},
     combinator::{map_res, opt},
-    error::{ContextError, ParseError},
-    multi::{many, many0},
-    number::complete::u8 as parse_u8,
-    IResult, Parser,
+    multi::many0,
+    sequence::{preceded, terminated},
+    Parser,
 };
-use sha1::Sha1;
+use uuid::Uuid;
 
 pub struct Sln {
     pub projects: Vec<Project>,
@@ -16,10 +15,10 @@ pub struct Sln {
 
 #[derive(Default)]
 pub struct Project {
-    pub up_hash: Sha1,
+    pub up_uuid: Uuid,
     pub name: String,
     pub path: String,
-    pub hash: Sha1,
+    pub uuid: Uuid,
 
     pub section_dependencies: Option<SectionDependencies>,
 }
@@ -30,8 +29,8 @@ pub struct SectionDependencies {
 }
 
 pub struct SectionDependency {
-    pub hash1: Sha1,
-    pub hash2: Sha1,
+    pub from: Uuid,
+    pub to: Uuid,
     // should be equal?
 }
 
@@ -58,7 +57,7 @@ pub struct ProjectConfigurationPlatforms {
 }
 
 pub struct ProjectConfigurationPlatform {
-    pub hash: Sha1,
+    pub uuid: Uuid,
     pub sln_platform_name: String,
     pub is_enabled: bool,
 }
@@ -68,8 +67,8 @@ pub struct SolutionProperties {
 }
 
 pub struct NestedProjects {
-    pub from: Sha1,
-    pub to: Sha1,
+    pub from: Uuid,
+    pub to: Uuid,
 }
 
 impl Sln {
@@ -99,18 +98,62 @@ impl Sln {
 }
 
 impl Project {
+    // Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "survarium", "survarium", "{4E2399DA-D511-4F61-ACCB-894F87214FC5}"
+    // EndProject
     pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
         let (i, _) = tag("Project").parse(i)?;
-        // ..
+
+        let (i, up_uuid) = parse_parentheses(i)?;
+        let (j, up_uuid) = parse_uuid(up_uuid)?;
+        assert_eq!(j, "");
+
+        let (i, _) = charsep('=').parse(i)?;
+
+        let (i, name) = parse_string(i)?;
+        let (i, _) = charsep(',').parse(i)?;
+
+        let (i, path) = parse_string(i)?;
+        let (i, _) = charsep(',').parse(i)?;
+
+        let (i, uuid) = parse_uuid(i)?;
+        let (i, _) = sp(i)?;
+
         let (i, _) = tag("EndProject").parse(i)?;
 
-        Ok((i, Self::default()))
+        Ok((
+            i,
+            Self {
+                up_uuid,
+                name: name.to_string(),
+                path: path.to_string(),
+                uuid,
+                section_dependencies: None,
+            },
+        ))
     }
 }
+
 impl Global {
     pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
         Ok((i, Self::default()))
     }
+}
+
+fn parse_uuid(i: &str) -> nom::IResult<&str, Uuid> {
+    let (i, up_uuid) = parse_string(i)?;
+
+    let up_uuid = Uuid::parse_str(up_uuid)
+        .map_err(|_| nom::Err::Error(nom::error::Error::new(i, nom::error::ErrorKind::Fail)))?;
+
+    Ok((i, up_uuid))
+}
+
+fn parse_parentheses(i: &str) -> nom::IResult<&str, &str> {
+    preceded(char('('), terminated(take_until(")"), char(')'))).parse(i)
+}
+
+fn parse_string(i: &str) -> nom::IResult<&str, &str> {
+    preceded(char('"'), terminated(take_until("\""), char('"'))).parse(i)
 }
 
 fn vs_version(i: &str) -> nom::IResult<&str, u16> {
@@ -129,6 +172,16 @@ fn sln_version(i: &str) -> nom::IResult<&str, (u8, u8)> {
     Ok((i, (major_version, minor_version)))
 }
 
+fn charsep(sep: char) -> impl FnMut(&str) -> nom::IResult<&str, char> {
+    move |i: &str| {
+        let (i, _) = sp(i)?;
+        let (i, sep) = char(sep).parse(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, sep))
+    }
+}
+
 fn sp(i: &str) -> nom::IResult<&str, &str> {
     let chars = " \t\r\n";
 
@@ -143,5 +196,40 @@ mod test {
     fn parses_sln_version() {
         let input = "Microsoft Visual Studio Solution File, Format Version 12.13";
         assert_eq!(sln_version(input).unwrap().1, (12, 13));
+    }
+
+    #[test]
+    fn parses_escaped_str() {
+        let input = "\"hello\"";
+        assert_eq!(parse_string(input).unwrap().1, "hello");
+    }
+
+    #[test]
+    fn parses_empty_project() {
+        let input = r#"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "survarium", "survarium", "{4E2399DA-D511-4F61-ACCB-894F87214FC5}"
+EndProject
+"#.trim();
+
+        let project = Project::parse(input).unwrap().1;
+        assert_eq!(project.name, "survarium");
+        assert_eq!(project.path, "survarium");
+        assert_eq!(
+            project.up_uuid,
+            Uuid::parse_str("{2150E333-8FDC-42A3-9474-1A3956D46DE8}").unwrap()
+        );
+        assert_eq!(
+            project.uuid,
+            Uuid::parse_str("{4E2399DA-D511-4F61-ACCB-894F87214FC5}").unwrap()
+        );
+    }
+
+    #[test]
+    fn hello() {
+        let mut parser = preceded(charsep('('), tag("hello"));
+
+        assert_eq!(parser.parse("   (    hello").unwrap().1, "hello");
+        assert_eq!(parser.parse("(hello").unwrap().1, "hello");
+        assert_eq!(parser.parse("\n\n(         \r\thello").unwrap().1, "hello");
     }
 }
