@@ -1,5 +1,5 @@
 use nom::{
-    bytes::complete::{tag, take_until, take_while},
+    bytes::complete::{tag, take_until, take_until1, take_while},
     character::complete::{char, digit1},
     combinator::{map_res, opt},
     multi::many0,
@@ -8,12 +8,13 @@ use nom::{
 };
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub struct Sln {
     pub projects: Vec<Project>,
     pub global: Global,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Project {
     pub up_uuid: Uuid,
     pub name: String,
@@ -23,11 +24,12 @@ pub struct Project {
     pub section_dependencies: Option<SectionDependencies>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SectionDependencies {
     pub deps: Vec<SectionDependency>,
 }
 
+#[derive(Debug)]
 pub struct SectionDependency {
     pub from: Uuid,
     pub to: Uuid,
@@ -37,42 +39,48 @@ pub struct SectionDependency {
 //
 //
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Global {
     pub pre_sln_platforms: Option<SolutionConfigurationPlatforms>,
     pub post_proj_platforms: Option<ProjectConfigurationPlatforms>,
     pub pre_props: Option<SolutionProperties>,
 }
 
+#[derive(Debug)]
 pub struct SolutionConfigurationPlatforms {
     pub platforms: Vec<SolutionConfigurationPlatform>,
 }
 
+#[derive(Debug)]
 pub struct SolutionConfigurationPlatform {
     pub platform_name: String,
 }
 
+#[derive(Debug)]
 pub struct ProjectConfigurationPlatforms {
     pub platforms: Vec<ProjectConfigurationPlatform>,
 }
 
+#[derive(Debug)]
 pub struct ProjectConfigurationPlatform {
     pub uuid: Uuid,
     pub sln_platform_name: String,
     pub is_enabled: bool,
 }
 
+#[derive(Debug)]
 pub struct SolutionProperties {
     pub hide_solution_node: bool,
 }
 
+#[derive(Debug)]
 pub struct NestedProjects {
     pub from: Uuid,
     pub to: Uuid,
 }
 
 impl Sln {
-    pub fn parse<'a>(i: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = opt(tag("\u{FEFF}")).parse(i)?;
 
         let (i, _) = sp(i)?;
@@ -91,9 +99,9 @@ impl Sln {
         let (i, projects) = many0(Project::parse).parse(i)?;
 
         let (i, _) = sp(i)?;
-        let (_, global) = Global::parse(i)?;
+        let (i, global) = Global::parse(i)?;
 
-        Ok(Self { projects, global })
+        Ok((i, Self { projects, global }))
     }
 }
 
@@ -118,7 +126,10 @@ impl Project {
         let (i, uuid) = parse_uuid(i)?;
         let (i, _) = sp(i)?;
 
+        let (i, section_dependencies) = opt(SectionDependencies::parse).parse(i)?;
+
         let (i, _) = tag("EndProject").parse(i)?;
+        let (i, _) = sp(i)?;
 
         Ok((
             i,
@@ -127,9 +138,41 @@ impl Project {
                 name: name.to_string(),
                 path: path.to_string(),
                 uuid,
-                section_dependencies: None,
+                section_dependencies,
             },
         ))
+    }
+}
+
+// ProjectSection(ProjectDependencies) = postProject
+// 	{CE017322-01FC-4851-9C8B-64E9A8E26C38} = {CE017322-01FC-4851-9C8B-64E9A8E26C38}
+// 	{F143D180-D4C4-4037-B3DE-BE89A21C8D1D} = {F143D180-D4C4-4037-B3DE-BE89A21C8D1D}
+// 	{4046F392-A18B-4C66-9639-3EABFFF5D531} = {4046F392-A18B-4C66-9639-3EABFFF5D531}
+// EndProjectSection
+impl SectionDependencies {
+    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+        let (i, _) = tag("ProjectSection(ProjectDependencies) = postProject").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        let (i, deps) = many0(SectionDependency::parse).parse(i)?;
+
+        let (i, _) = tag("EndProjectSection").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self { deps }))
+    }
+}
+
+// 	{4046F392-A18B-4C66-9639-3EABFFF5D531} = {4046F392-A18B-4C66-9639-3EABFFF5D531}
+impl SectionDependency {
+    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+        let (i, from) = parse_uuid_raw(i)?;
+        let (i, _) = charsep('=').parse(i)?;
+
+        let (i, to) = parse_uuid_raw(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self { from, to }))
     }
 }
 
@@ -141,11 +184,23 @@ impl Global {
 
 fn parse_uuid(i: &str) -> nom::IResult<&str, Uuid> {
     let (i, up_uuid) = parse_string(i)?;
+    let (j, up_uuid) = parse_uuid_raw(up_uuid)?;
+    assert_eq!(j, "");
+
+    Ok((i, up_uuid))
+}
+
+fn parse_uuid_raw(i: &str) -> nom::IResult<&str, Uuid> {
+    let (i, up_uuid) = parse_curly(i)?;
 
     let up_uuid = Uuid::parse_str(up_uuid)
         .map_err(|_| nom::Err::Error(nom::error::Error::new(i, nom::error::ErrorKind::Fail)))?;
 
     Ok((i, up_uuid))
+}
+
+fn parse_curly(i: &str) -> nom::IResult<&str, &str> {
+    preceded(char('{'), terminated(take_until("}"), char('}'))).parse(i)
 }
 
 fn parse_parentheses(i: &str) -> nom::IResult<&str, &str> {
@@ -222,6 +277,23 @@ EndProject
             project.uuid,
             Uuid::parse_str("{4E2399DA-D511-4F61-ACCB-894F87214FC5}").unwrap()
         );
+    }
+
+    #[test]
+    fn parse_project() {
+        let input = r#"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bugtrap", "BugTrap\BugTrap.vcproj", "{E8CF1ADA-264A-4127-86C2-FD7057D3792C}"
+	ProjectSection(ProjectDependencies) = postProject
+		{CA2604CA-A2AC-49A1-A468-8AB5A2E6CBC9} = {CA2604CA-A2AC-49A1-A468-8AB5A2E6CBC9}
+		{893279CB-0805-405F-B484-9BB728A18261} = {893279CB-0805-405F-B484-9BB728A18261}
+	EndProjectSection
+EndProject
+"#.trim();
+
+        let project = Project::parse(input).unwrap().1;
+        assert_eq!(project.name, "bugtrap");
+        assert_eq!(project.path, "BugTrap\\BugTrap.vcproj");
+        assert_eq!(project.section_dependencies.unwrap().deps.len(), 2);
     }
 
     #[test]

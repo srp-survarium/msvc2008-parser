@@ -7,5 +7,10 @@ mod sln_raw;
 const SLN: &str = include_str!("../resources/vostok.sln");
 
 fn main() {
-    Sln::parse(SLN).unwrap();
+    let (i, sln) = Sln::parse(SLN).unwrap();
+
+    println!("{:#?}", sln);
+
+    println!("\nINPUT LEFT:");
+    println!("{}", i);
 }
