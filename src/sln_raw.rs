@@ -1,5 +1,5 @@
 use nom::{
-    bytes::complete::{tag, take_until, take_until1, take_while},
+    bytes::complete::{tag, take_until, take_until1, take_while, take_while1},
     character::complete::{char, digit1},
     combinator::{map_res, opt},
     multi::many0,
@@ -41,42 +41,55 @@ pub struct SectionDependency {
 
 #[derive(Default, Debug)]
 pub struct Global {
-    pub pre_sln_platforms: Option<SolutionConfigurationPlatforms>,
-    pub post_proj_platforms: Option<ProjectConfigurationPlatforms>,
-    pub pre_props: Option<SolutionProperties>,
+    pub sln_platforms: SolutionConfigurationPlatforms, // pre
+    pub proj_cfg_platforms: ProjectConfigurationPlatforms, // post
+    pub sln_properties: SolutionProperties, // pre
+    pub nested_projects: NestedProjects, // pre
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct SolutionConfigurationPlatforms {
     pub platforms: Vec<SolutionConfigurationPlatform>,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct SolutionConfigurationPlatform {
-    pub platform_name: String,
+    pub platform: ConfigurationPlatform,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct ProjectConfigurationPlatforms {
     pub platforms: Vec<ProjectConfigurationPlatform>,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct ProjectConfigurationPlatform {
     pub uuid: Uuid,
-    pub sln_platform_name: String,
+    pub target_cfg: ConfigurationPlatform,
+    pub cfg: ConfigurationPlatform,
     pub is_enabled: bool,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct SolutionProperties {
     pub hide_solution_node: bool,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct NestedProjects {
+    pub projects: Vec<NestedProject>,
+}
+
+#[derive(Default, Debug)]
+pub struct NestedProject {
     pub from: Uuid,
     pub to: Uuid,
+}
+
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct ConfigurationPlatform {
+    pub build_kind: String,
+    pub platform_name: String,
 }
 
 impl Sln {
@@ -108,7 +121,7 @@ impl Sln {
 impl Project {
     // Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "survarium", "survarium", "{4E2399DA-D511-4F61-ACCB-894F87214FC5}"
     // EndProject
-    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("Project").parse(i)?;
 
         let (i, up_uuid) = parse_parentheses(i)?;
@@ -150,7 +163,7 @@ impl Project {
 // 	{4046F392-A18B-4C66-9639-3EABFFF5D531} = {4046F392-A18B-4C66-9639-3EABFFF5D531}
 // EndProjectSection
 impl SectionDependencies {
-    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("ProjectSection(ProjectDependencies) = postProject").parse(i)?;
         let (i, _) = sp(i)?;
 
@@ -165,7 +178,7 @@ impl SectionDependencies {
 
 // 	{4046F392-A18B-4C66-9639-3EABFFF5D531} = {4046F392-A18B-4C66-9639-3EABFFF5D531}
 impl SectionDependency {
-    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, from) = parse_uuid_raw(i)?;
         let (i, _) = charsep('=').parse(i)?;
 
@@ -177,8 +190,180 @@ impl SectionDependency {
 }
 
 impl Global {
-    pub fn parse<'a>(i: &'a str) -> nom::IResult<&'a str, Self> {
-        Ok((i, Self::default()))
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, _) = tag("Global").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        let (i, sln_platforms) = SolutionConfigurationPlatforms::parse(i)?;
+        let (i, proj_cfg_platforms) = ProjectConfigurationPlatforms::parse(i)?;
+        let (i, sln_properties) = SolutionProperties::parse(i)?;
+        let (i, nested_projects) = NestedProjects::parse(i)?;
+
+        let (i, _) = tag("EndGlobal").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self {
+            sln_platforms,
+            proj_cfg_platforms,
+            sln_properties,
+            nested_projects,
+        }))
+    }
+}
+
+impl SolutionConfigurationPlatforms {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, _) = tag("GlobalSection(SolutionConfigurationPlatforms) = preSolution").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        let (i, platforms) = many0(SolutionConfigurationPlatform::parse).parse(i)?;
+
+        let (i, _) = tag("EndGlobalSection").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self { platforms }))
+    }
+}
+
+impl SolutionConfigurationPlatform {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+
+        let (i, platform_lhs) = ConfigurationPlatform::parse(i)?;
+        let (i, _) = charsep('=').parse(i)?;
+        let (i, platform_rhs) = ConfigurationPlatform::parse(i)?;
+        let (i, _) = sp(i)?;
+
+        assert_eq!(platform_lhs, platform_rhs);
+
+        Ok((i, Self { platform: platform_lhs }))
+    }
+}
+
+// GlobalSection(ProjectConfigurationPlatforms) = postSolution
+// 	{A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
+// 	{A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.Build.0 = Master Gold|Win32
+// 	{E7FF01A9-20EA-431D-8EE5-71631F8C05A5}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
+// EndGlobalSection
+impl ProjectConfigurationPlatforms {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, _) = tag("GlobalSection(ProjectConfigurationPlatforms) = postSolution").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        let (i, platforms) = many0(ProjectConfigurationPlatform::parse).parse(i)?;
+
+        let (i, _) = tag("EndGlobalSection").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self { platforms }))
+    }
+}
+
+impl ProjectConfigurationPlatform {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, uuid) = parse_uuid_raw(i)?;
+        let (i, _) = char('.').parse(i)?;
+        let (i, target_cfg) = ConfigurationPlatform::parse(i)?;
+        let (i, _) = char('.').parse(i)?;
+        let (i, _) = tag("ActiveCfg").parse(i)?;
+        let (i, _) = charsep('=').parse(i)?;
+        let (i, cfg) = ConfigurationPlatform::parse(i)?;
+        let (i, _) = sp(i)?;
+
+        let mut this = Self {
+            uuid,
+            target_cfg,
+            cfg,
+            is_enabled: false,
+        };
+
+        let (i, is_enabled) = opt(this.is_enabled_parser()).parse(i)?;
+        this.is_enabled = is_enabled.is_some();
+
+        Ok((i, this))
+    }
+
+    // {A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.Build.0 = Master Gold|Win32
+    fn is_enabled_parser<'a>(&'a self) ->  impl FnMut(&str) -> nom::IResult<&str, ()> + 'a {
+        |i: &str| {
+            let (i, uuid) = parse_uuid_raw(i)?;
+            let (i, _) = char('.').parse(i)?;
+            let (i, target_cfg) = ConfigurationPlatform::parse(i)?;
+            let (i, _) = char('.').parse(i)?;
+            let (i, _) = tag("Build.0").parse(i)?; // !!!
+            let (i, _) = charsep('=').parse(i)?;
+            let (i, cfg) = ConfigurationPlatform::parse(i)?;
+            let (i, _) = sp(i)?;
+
+            assert_eq!(self.uuid, uuid);
+            assert_eq!(self.target_cfg, target_cfg);
+            assert_eq!(self.cfg, cfg);
+
+            Ok((i, ()))
+        }
+    }
+}
+impl ConfigurationPlatform {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+
+        let (i, build_kind) = take_until1("|").parse(i)?;
+        let (i, _) = char('|').parse(i)?;
+        let (i, platform_name) = Self::take_until1_platform_sep(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self {
+            build_kind: build_kind.to_string(),
+            platform_name: platform_name.to_string(),
+        }))
+    }
+
+    fn take_until1_platform_sep(i: &str) -> nom::IResult<&str, &str> {
+        take_while1(move |c| !" .\t\r\n".contains(c)).parse(i)
+    }
+}
+
+// GlobalSection(SolutionProperties) = preSolution
+// 		HideSolutionNode = FALSE
+// EndGlobalSection
+impl SolutionProperties {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, _) = tag("GlobalSection(SolutionProperties) = preSolution").parse(i)?;
+        let (i, _) = sp(i)?;
+        let (i, _) = tag("HideSolutionNode = FALSE").parse(i)?;
+        let (i, _) = sp(i)?;
+        let (i, _) = tag("EndGlobalSection").parse(i)?;
+        let (i, _) = sp(i)?;
+        Ok((i, Self { hide_solution_node: false}))
+    }
+}
+
+
+impl NestedProjects {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, _) = tag("GlobalSection(NestedProjects) = preSolution").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        let (i, projects) = many0(NestedProject::parse).parse(i)?;
+
+        let (i, _) = tag("EndGlobalSection").parse(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self { projects }))
+    }
+}
+
+// 		{CF4712AF-0AD9-499D-BB31-3FFBF840E6BF} = {776A52DA-4E55-4FBB-9128-942DEC6FD49F}
+// 		{1920DFDF-1B22-4B03-A059-33549C9EBD7C} = {776A52DA-4E55-4FBB-9128-942DEC6FD49F}
+// 		{C92DCB6B-950B-4B4C-BEEF-1EDCAE789018} = {776A52DA-4E55-4FBB-9128-942DEC6FD49F}
+// 		{056D4C47-10DD-49AD-8213-8201E2114B06} = {4806F475-DEDD-4C00-B866-E5E6AAC302C1}
+// 		{5D43FBAA-EC56-45A0-A390-FC97629B4229} = {AA86F3B2-7439-467E-A3D4-652E0A94CE9C}
+impl NestedProject {
+    pub fn parse(i: &str) -> nom::IResult<&str, Self> {
+        let (i, from) = parse_uuid_raw(i)?;
+        let (i, _) = charsep('=').parse(i)?;
+        let (i, to) = parse_uuid_raw(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((i, Self { from, to }))
     }
 }
 
@@ -238,9 +423,7 @@ fn charsep(sep: char) -> impl FnMut(&str) -> nom::IResult<&str, char> {
 }
 
 fn sp(i: &str) -> nom::IResult<&str, &str> {
-    let chars = " \t\r\n";
-
-    take_while(move |c| chars.contains(c)).parse(i)
+    take_while(move |c| " \t\r\n".contains(c)).parse(i)
 }
 
 #[cfg(test)]
@@ -297,11 +480,42 @@ EndProject
     }
 
     #[test]
-    fn hello() {
-        let mut parser = preceded(charsep('('), tag("hello"));
+    fn parse_configuration_platform() {
+        let input = r#"
+		Master Gold|Win32 = Master Gold|Win32
+        "#.trim();
+        let (i, conf) = SolutionConfigurationPlatform::parse(input).unwrap();
 
-        assert_eq!(parser.parse("   (    hello").unwrap().1, "hello");
-        assert_eq!(parser.parse("(hello").unwrap().1, "hello");
-        assert_eq!(parser.parse("\n\n(         \r\thello").unwrap().1, "hello");
+
+        assert_eq!(i, "");
+        assert_eq!(conf.platform.build_kind, "Master Gold");
+        assert_eq!(conf.platform.platform_name, "Win32");
+    }
+
+    #[test]
+    fn parse_configuration_platforms() {
+        let input = r#"
+            GlobalSection(ProjectConfigurationPlatforms) = postSolution
+            	{A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
+            	{A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.Build.0 = Master Gold|Win32
+            	{E7FF01A9-20EA-431D-8EE5-71631F8C05A5}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
+            	{E7FF01A9-20EA-431D-8EE5-71631F8C05A5}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
+            EndGlobalSection
+        "#.trim();
+        let (i, conf) = ProjectConfigurationPlatforms::parse(input).unwrap();
+
+        assert_eq!(i, "");
+        assert_eq!(conf.platforms.len(), 3);
+        assert_eq!(conf.platforms[0].is_enabled, true);
+        assert_eq!(conf.platforms[1].is_enabled, false);
+        assert_eq!(conf.platforms[2].is_enabled, false);
+    }
+
+    #[test]
+    fn parses_sln() {
+        const SLN: &str = include_str!("../resources/vostok.sln");
+
+        let (i, _sln) = Sln::parse(SLN).unwrap();
+        assert_eq!(i, "");
     }
 }
