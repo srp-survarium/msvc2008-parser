@@ -35,13 +35,10 @@ pub struct SectionDependency {
     pub to: Uuid,
 }
 
-//
-//
-
 #[derive(Default, Debug)]
 pub struct Global {
     pub sln_platforms: SolutionConfigurationPlatforms, // pre
-    pub proj_cfg_platforms: ProjectConfigurationPlatforms, // post
+    pub cfg_platforms: ProjectConfigurationPlatforms,  // post
     pub sln_properties: SolutionProperties,            // pre
     pub nested_projects: NestedProjects,               // pre
 }
@@ -118,8 +115,6 @@ impl Sln {
 }
 
 impl Project {
-    // Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "survarium", "survarium", "{4E2399DA-D511-4F61-ACCB-894F87214FC5}"
-    // EndProject
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("Project").parse(i)?;
 
@@ -156,11 +151,6 @@ impl Project {
     }
 }
 
-// ProjectSection(ProjectDependencies) = postProject
-// 	{CE017322-01FC-4851-9C8B-64E9A8E26C38} = {CE017322-01FC-4851-9C8B-64E9A8E26C38}
-// 	{F143D180-D4C4-4037-B3DE-BE89A21C8D1D} = {F143D180-D4C4-4037-B3DE-BE89A21C8D1D}
-// 	{4046F392-A18B-4C66-9639-3EABFFF5D531} = {4046F392-A18B-4C66-9639-3EABFFF5D531}
-// EndProjectSection
 impl SectionDependencies {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("ProjectSection(ProjectDependencies) = postProject").parse(i)?;
@@ -175,7 +165,6 @@ impl SectionDependencies {
     }
 }
 
-// 	{4046F392-A18B-4C66-9639-3EABFFF5D531} = {4046F392-A18B-4C66-9639-3EABFFF5D531}
 impl SectionDependency {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, from) = parse_uuid_raw(i)?;
@@ -194,7 +183,7 @@ impl Global {
         let (i, _) = sp(i)?;
 
         let (i, sln_platforms) = SolutionConfigurationPlatforms::parse(i)?;
-        let (i, proj_cfg_platforms) = ProjectConfigurationPlatforms::parse(i)?;
+        let (i, cfg_platforms) = ProjectConfigurationPlatforms::parse(i)?;
         let (i, sln_properties) = SolutionProperties::parse(i)?;
         let (i, nested_projects) = NestedProjects::parse(i)?;
 
@@ -205,7 +194,7 @@ impl Global {
             i,
             Self {
                 sln_platforms,
-                proj_cfg_platforms,
+                cfg_platforms,
                 sln_properties,
                 nested_projects,
             },
@@ -245,11 +234,6 @@ impl SolutionConfigurationPlatform {
     }
 }
 
-// GlobalSection(ProjectConfigurationPlatforms) = postSolution
-// 	{A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
-// 	{A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.Build.0 = Master Gold|Win32
-// 	{E7FF01A9-20EA-431D-8EE5-71631F8C05A5}.Master Gold|Win32.ActiveCfg = Master Gold|Win32
-// EndGlobalSection
 impl ProjectConfigurationPlatforms {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("GlobalSection(ProjectConfigurationPlatforms) = postSolution").parse(i)?;
@@ -288,7 +272,6 @@ impl ProjectConfigurationPlatform {
         Ok((i, this))
     }
 
-    // {A0327856-D686-4659-90B9-226877A9D11F}.Master Gold|Win32.Build.0 = Master Gold|Win32
     fn is_enabled_parser<'a>(&'a self) -> impl FnMut(&str) -> nom::IResult<&str, ()> + 'a {
         |i: &str| {
             let (i, uuid) = parse_uuid_raw(i)?;
@@ -329,9 +312,6 @@ impl ConfigurationPlatform {
     }
 }
 
-// GlobalSection(SolutionProperties) = preSolution
-// 		HideSolutionNode = FALSE
-// EndGlobalSection
 impl SolutionProperties {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("GlobalSection(SolutionProperties) = preSolution").parse(i)?;
@@ -363,11 +343,6 @@ impl NestedProjects {
     }
 }
 
-// 		{CF4712AF-0AD9-499D-BB31-3FFBF840E6BF} = {776A52DA-4E55-4FBB-9128-942DEC6FD49F}
-// 		{1920DFDF-1B22-4B03-A059-33549C9EBD7C} = {776A52DA-4E55-4FBB-9128-942DEC6FD49F}
-// 		{C92DCB6B-950B-4B4C-BEEF-1EDCAE789018} = {776A52DA-4E55-4FBB-9128-942DEC6FD49F}
-// 		{056D4C47-10DD-49AD-8213-8201E2114B06} = {4806F475-DEDD-4C00-B866-E5E6AAC302C1}
-// 		{5D43FBAA-EC56-45A0-A390-FC97629B4229} = {AA86F3B2-7439-467E-A3D4-652E0A94CE9C}
 impl NestedProject {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, from) = parse_uuid_raw(i)?;
