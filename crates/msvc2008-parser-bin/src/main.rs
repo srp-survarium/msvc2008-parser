@@ -7,12 +7,7 @@ use std::path::Path;
 use anyhow::Context;
 use clap::Parser;
 
-use crate::vcproj_raw::VCProject;
-
-mod sln_raw;
-mod vcproj_raw;
-
-const VCPROJ: &str = include_str!("../resources/game.vcproj");
+use msvc2008_parser_lib::{sln, vcproj};
 
 #[derive(clap::Parser)]
 pub struct Cli {
@@ -30,7 +25,7 @@ fn main() -> anyhow::Result<()> {
         project_name,
     } = Cli::parse();
     let sln = std::fs::read_to_string(&sln_path)?;
-    let sln = match sln_raw::Sln::parse(&sln) {
+    let sln = match sln::Sln::parse(&sln) {
         Ok((_leftovers, sln)) => sln,
         Err(error) => anyhow::bail!("{error}"),
     };
@@ -59,7 +54,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         let vcproj = std::fs::read_to_string(&project_path)?;
-        let vcproj = VCProject::parse_xml(&vcproj)
+        let _vcproj = vcproj::VCProject::parse_xml(&vcproj)
             .with_context(|| format!("Failed parsing '{}' at '{}'", dep.name, dep.path))?;
     }
 

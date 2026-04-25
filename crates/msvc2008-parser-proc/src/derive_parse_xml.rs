@@ -1,0 +1,212 @@
+use quote::quote;
+use syn::{spanned::Spanned, Data, Fields, GenericArgument, LitStr, PathArguments, Token, Type};
+
+use crate::bail;
+
+#[derive(Default)]
+struct ParseXmlAttr {
+    tag: Option<String>,
+    ignores: Vec<String>,
+}
+
+impl syn::parse::Parse for ParseXmlAttr {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut tag = None;
+        let mut ignores = vec![];
+
+        while !input.is_empty() {
+            let key: syn::Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let value: LitStr = input.parse()?;
+
+            match key.to_string().as_str() {
+                "tag" => tag = Some(value.value()),
+                "ignore" => ignores.push(value.value()),
+                k => bail!(key, "unknown key: {k}"),
+            }
+
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        Ok(Self { tag, ignores })
+    }
+}
+
+struct FieldAttr {
+    rename: Option<String>,
+    skip: bool,
+}
+
+impl FieldAttr {
+    fn parse(field: &syn::Field) -> syn::Result<Self> {
+        let mut rename = None;
+        let mut skip = false;
+
+        for attr in &field.attrs {
+            if attr.path().is_ident("skip") {
+                skip = true;
+            } else if attr.path().is_ident("rename") {
+                let value: LitStr = attr.parse_args()?;
+                rename = Some(value.value());
+            }
+        }
+
+        Ok(Self { rename, skip })
+    }
+}
+
+enum FieldKind<'a> {
+    Optional(&'a Type),
+    Required(&'a Type),
+    Skipped,
+}
+
+impl<'a> FieldKind<'a> {
+    fn classify(field: &'a syn::Field, field_attr: &FieldAttr) -> Self {
+        if field_attr.skip {
+            return FieldKind::Skipped;
+        }
+        match unwrap_option(&field.ty) {
+            Some(inner) => Self::Optional(inner),
+            None => Self::Required(&field.ty),
+        }
+    }
+}
+
+pub fn derive_parse_xml(input: syn::DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let struct_name = &input.ident;
+
+    let attr = input.attrs.iter().find(|a| a.path().is_ident("parse_xml"));
+    let ParseXmlAttr { tag, ignores } = match attr {
+        None => ParseXmlAttr::default(),
+        Some(attr) => attr.parse_args()?,
+    };
+
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(f) => &f.named,
+            _ => bail!(s.fields, "ParseXml only supports named structs"),
+        },
+        _ => bail!(input, "ParseXml only supports structs"),
+    };
+
+    let ignore_entries: proc_macro2::TokenStream =
+        ignores.iter().map(|i| quote! { ignore: #i, }).collect();
+
+    let mut parse_attrs_entries = proc_macro2::TokenStream::new();
+    let mut parse_attrs_entries_opt = proc_macro2::TokenStream::new();
+
+    let mut parse_calls = proc_macro2::TokenStream::new();
+    let mut struct_fields = proc_macro2::TokenStream::new();
+
+    let mut has_skipped_fields = false;
+
+    for field in fields {
+        let Some(field_name) = field.ident.as_ref() else {
+            bail!(field, "Field without an identifier");
+        };
+
+        let field_attr = FieldAttr::parse(field)?;
+        let field_kind = FieldKind::classify(field, &field_attr);
+
+        let xml_name = field_attr
+            .rename
+            .unwrap_or_else(|| snake_to_pascal(&field_name.to_string()));
+
+        match field_kind {
+            FieldKind::Skipped => {
+                has_skipped_fields = true;
+                struct_fields.extend(quote! { #field_name: Default::default(), });
+            }
+            FieldKind::Optional(inner) => {
+                let Some(optparse_ty) = parse_type_tokens(inner) else {
+                    bail!(inner, "Failed parsing tokens");
+                };
+
+                parse_attrs_entries_opt.extend(quote! { optional: #xml_name => #field_name, });
+                parse_calls.extend(quote! { optparse!(#field_name: #optparse_ty); });
+                struct_fields.extend(quote! { #field_name, });
+            }
+            FieldKind::Required(ty) => {
+                let Some(parse_ty) = parse_type_tokens(ty) else {
+                    bail!(ty, "Failed parsing tokens");
+                };
+
+                parse_attrs_entries.extend(quote! { #xml_name => #field_name, });
+                parse_calls.extend(quote! { parse!(#field_name: #parse_ty); });
+                struct_fields.extend(quote! { #field_name, });
+            }
+        }
+    }
+
+    let function_name = match has_skipped_fields {
+        true => quote! { parse_xml_inner },
+        false => quote! { parse_xml },
+    };
+
+    let tag_lit = match tag {
+        Some(tag) => tag,
+        None => struct_name.to_string(),
+    };
+
+    Ok(quote! {
+        impl #struct_name {
+            #[rustfmt::skip]
+            pub fn #function_name(node: roxmltree::Node) -> anyhow::Result<Self> {
+                parse_attrs!(node, #tag_lit, {
+                    #parse_attrs_entries
+                    #parse_attrs_entries_opt
+                    #ignore_entries
+                });
+
+                #parse_calls
+
+                Ok(Self { #struct_fields })
+            }
+        }
+    })
+}
+
+fn snake_to_pascal(s: &str) -> String {
+    s.split('_')
+        .map(|part| {
+            let mut c = part.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+            }
+        })
+        .collect()
+}
+
+fn unwrap_option(ty: &Type) -> Option<&Type> {
+    let Type::Path(tp) = ty else { return None };
+    let seg = tp.path.segments.last()?;
+    if seg.ident != "Option" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return None;
+    };
+    let GenericArgument::Type(inner) = args.args.first()? else {
+        return None;
+    };
+    Some(inner)
+}
+
+fn parse_type_tokens(ty: &Type) -> Option<proc_macro2::TokenStream> {
+    let result = match type_name(ty)?.as_str() {
+        "bool" => quote! { bool },
+        "String" => quote! { String },
+        "Vec" => quote! { Vec<_> },
+        _ => quote! { #ty },
+    };
+    Some(result)
+}
+
+fn type_name(ty: &Type) -> Option<String> {
+    let Type::Path(tp) = ty else { return None };
+    Some(tp.path.segments.last()?.ident.to_string())
+}

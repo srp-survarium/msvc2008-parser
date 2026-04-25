@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use nom::{
     bytes::complete::{tag, take_until, take_until1, take_while, take_while1},
