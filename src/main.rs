@@ -1,16 +1,106 @@
 #![allow(dead_code)]
-
-use crate::sln_raw::Sln;
+#![allow(unused_imports)]
 
 mod sln_raw;
+mod vcproj_raw;
 
-const SLN: &str = include_str!("../resources/vostok.sln");
+const VCPROJ: &str = include_str!("../resources/game.vcproj");
 
 fn main() {
-    let (i, sln) = Sln::parse(SLN).unwrap();
-
-    println!("{:#?}", sln);
-
-    println!("\nINPUT LEFT:");
-    println!("{}", i);
+    let project = vcproj_raw::Project::parse_xml(VCPROJ).unwrap();
+    println!("{:#?}", project);
 }
+
+// "WPFToolkit.Extended",          "WPFToolkit.Extended\WPFToolkit.Extended.csproj"
+// "WeifenLuo.WinFormsUI.Docking", "WeifenLuo.WinFormsUI.Docking\WeifenLuo.WinFormsUI.Docking.csproj"
+// "wpf_controls",                 "vostok\wpf_controls\wpf_controls.csproj"
+
+// "FreeImage",                  "FreeImage\FreeImageLib\FreeImageLib.vcproj"
+// "LibFoundation",              "WildMagic\LibFoundation\LibFoundation_VC90.vcproj"
+// "LibJPEG",                    "freeimage\LibJPEG\LibJPEG.vcproj"
+// "LibMNG",                     "freeimage\LibMNG\libMNG.vcproj"
+// "LibOpenJPEG",                "freeimage\LibOpenJPEG\LibOpenJPEG.vcproj"
+// "LibPNG",                     "freeimage\LibPNG\libPNG.vcproj"
+// "LibTIFF",                    "freeimage\LibTIFF\libTIFF.vcproj"
+// "OpenEXR",                    "freeimage\OpenEXR\OpenEXR.vcproj"
+
+// "bugtrap",                    "BugTrap\BugTrap.vcproj"
+// "bugtrapN",                   "BugTrap\BugTrapN.vcproj"
+// "bullet",                     "bullet\bullet.vcproj"
+// "core",                       "cs\core\sources\core.vcproj"
+// "lua.5.1.4",                  "lua\lua.5.1.4.vcproj"
+// "luabind.0.8.1",              "luabind\sources\luabind.0.8.1.vcproj"
+// "minizip",                    "minizip\minizip.vcproj"
+// "minizipN",                   "minizip\minizipN.vcproj"
+// "nvcore",                     "nvidia\nvt\project\nvcore.vcproj"
+// "nvimage",                    "nvidia\nvt\project\nvimage.vcproj"
+// "nvtt",                       "nvidia\nvt\project\nvtt.vcproj"
+// "ode",                        "ode\sources\ode.vcproj"
+// "ogg",                        "ogg\sources\win32\VS2008\libogg_static.vcproj"
+// "opcode",                     "opcode\Opcode.vcproj"
+// "script",                     "cs\script\sources\script.vcproj"
+// "shaders                      "..\resources\sources\shaders\sm_4_0\shaders.vcproj"
+// "squish",                     "nvidia\nvt\project\squish.vcproj"
+// "texture_compressor",         "amd\compress\texture_compressor\texture_compressor.vcproj"
+// "theora",                     "theora\sources\win32\VS2008\libtheora\libtheora_static.vcproj"
+// "vorbis",                     "vorbis\sources\win32\VS2008\libvorbis\libvorbis_static.vcproj"
+// "vorbisfile",                 "vorbis\sources\win32\VS2008\libvorbisfile\libvorbisfile_static.vcproj"
+// "zlib",                       "zlib\zlib.vcproj"
+// "zlibN",                      "zlib\zlibN.vcproj"
+
+// "ai",                         "vostok\ai\sources\ai.vcproj"
+// "ai_navigation",              "vostok\ai_navigation\sources\ai_navigation.vcproj"
+// "animation",                  "vostok\animation\sources\animation.vcproj"
+// "animation_editor",           "vostok\editor\animation\sources\animation_editor.vcproj"
+// "client",                     "vostok\client\sources\client.vcproj"
+// "collision",                  "vostok\collision\sources\collision.vcproj"
+// "core",                       "vostok\core\sources\core.vcproj"
+// "debug",                      "vostok\debug\sources\debug.vcproj"
+// "dialog_editor",              "vostok\editor\dialog\sources\dialog_editor.vcproj"
+// "editor",                     "vostok\editor\world\sources\editor.vcproj"
+// "editor_base",                "vostok\editor\base\sources\editor_base.vcproj"
+// "editor_controls",            "vostok\editor\controls\sources\editor_controls.vcproj"
+// "engine",                     "vostok\engine\sources\engine.vcproj"
+// "engine_pc_dx11",             "vostok\engine\pc\dx11\sources\engine_pc_dx11.vcproj"
+// "engine_pc_opengl",           "vostok\engine\pc\opengl\sources\engine_pc_opengl.vcproj"
+// "fs",                         "vostok\fs\sources\fs.vcproj"
+// "fs_pack",                    "vostok\fs_pack\sources\fs_pack.vcproj"
+// "game",                       "vostok\game\sources\game.vcproj"
+// "game_core",                  "vostok\game_core\sources\game_core.vcproj"
+// "game_server",                "vostok\game_server\sources\game_server.vcproj"
+// "graphics_benchmark",         "vostok\graphics_benchmark\sources\graphics_benchmark.vcproj"
+// "input",                      "vostok\input\sources\input.vcproj"
+// "lobby_server",               "vostok\lobby_server\sources\lobby_server.vcproj"
+// "logging",                    "vostok\logging\sources\logging.vcproj"
+// "login_server",               "vostok\login_server\sources\login_server.vcproj"
+// "maya2011",                   "vostok\maya\sources\maya.vcproj"
+// "maya2012",                   "vostok\maya\sources\maya2012.vcproj"
+// "maya_animation",             "vostok\maya_animation\sources\maya_animation.vcproj"
+// "model_editor",               "vostok\editor\model\sources\model_editor.vcproj"
+// "network",                    "vostok\network\sources\network.vcproj"
+// "network_core",               "vostok\network_core\sources\network_core.vcproj"
+// "particle",                   "vostok\particle\sources\particle.vcproj"
+// "particle_editor",            "vostok\editor\particle\sources\particle_editor.vcproj"
+// "physics",                    "vostok\physics\sources\physics.vcproj"
+// "render_core_pc_dx11",        "vostok\render\core\dx11\sources\render_core_pc_dx11.vcproj"
+// "render_engine_pc_dx11",      "vostok\render\engine\sources\render_engine_pc_dx11.vcproj"
+// "render_engine_pc_opengl",    "vostok\render\engine\sources\render_engine_pc_opengl.vcproj"
+// "render_facade",              "vostok\render\facade\sources\render_facade.vcproj"
+// "resources_performance_test", "vostok\resources_performance_test\sources\resources_performance_test.vcproj"
+// "rms_generator",              "vostok\rms_generator\sources\rms_generator.vcproj"
+// "rtp",                        "vostok\rtp\sources\rtp.vcproj"
+// "rtp_learn",                  "vostok\rtp_learn\sources\rtp_learn.vcproj"
+// "shader_compiler",            "vostok\shader_compiler\sources\shader_compiler.vcproj"
+// "shader_generator",           "vostok\shader_generator\sources\shader_generator.vcproj"
+// "sound",                      "vostok\sound\sources\sound.vcproj"
+// "sound_editor",               "vostok\editor\sound\sources\sound_editor.vcproj"
+// "sound_system_usage_example", "vostok\sound_system_usage_example\sources\sound_system_usage_example.vcproj"
+// "survarium                    "vostok\survarium\pc\sources\survarium_pc_dx11.vcproj"
+// "survarium                    "vostok\survarium\pc\sources\survarium_pc_opengl.vcproj"
+// "test",                       "vostok\test\sources\test.vcproj"
+// "test_animations",            "vostok\test_animations\sources\test_animations.vcproj"
+// "test_form",                  "vostok\test_form\test_form.vcproj"
+// "texture_compressor_test",    "vostok\texture_compressor_test\sources\texture_compressor_test.vcproj"
+// "ui",                         "vostok\ui\sources\ui.vcproj"
+// "vfs",                        "vostok\vfs\sources\vfs.vcproj"
+// "vfs_pack",                   "vostok\vfs_pack\sources\vfs_pack.vcproj"
