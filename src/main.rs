@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         let vcproj = std::fs::read_to_string(&project_path)?;
-        let _vcproj = VCProject::parse_xml(&vcproj)
+        let vcproj = VCProject::parse_xml(&vcproj)
             .with_context(|| format!("Failed parsing '{}' at '{}'", dep.name, dep.path))?;
     }
 

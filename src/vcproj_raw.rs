@@ -15,27 +15,28 @@ pub struct VCProject {
 }
 
 #[derive(Debug)]
+#[rustfmt::skip]
 pub struct Configuration {
-    name: String,
+    name:                                  String,
     // Requires interpolation:
     // OutputDirectory="$(SolutionDir)../binaries/$(PlatformName)/intermediates/$(ConfigurationName)/$(ProjectName)"
-    output_directory: Option<String>, // TODO: Can be missing in game in random config
+    output_directory:                      Option<String>, // TODO: Can be missing in game in random config
     // Requires interpolation:
     // IntermediateDirectory="$(SolutionDir)../binaries/$(PlatformName)/intermediates/$(ConfigurationName)/$(ProjectName)"
-    intermediate_directory: Option<String>, // TODO: Same as above
-    configuraiton_type: u8,                 // ??
-    character_set: Option<u8>,
-    whole_program_optimization: bool,
-    managed_extensions: Option<u8>,
+    intermediate_directory:                Option<String>, // TODO: Same as above
+    configuraiton_type:                    u8,                 // ??
+    character_set:                         Option<u8>,
+    whole_program_optimization:            bool,
+    managed_extensions:                    Option<u8>,
     atl_minimizes_c_runtime_library_usage: Option<bool>,
-    delete_extensions_on_clean: Option<String>,
-    inherited_property_sheets: Option<Vec<String>>,
-    use_of_atl: Option<u8>,
-    use_of_mfc: Option<i8>,
+    delete_extensions_on_clean:            Option<String>,
+    inherited_property_sheets:             Option<Vec<String>>,
+    use_of_atl:                            Option<u8>,
+    use_of_mfc:                            Option<i8>,
 
-    compiler_tool: Option<CompilerTool>, // TODO: Can be missing for Xbox
-    lib_tool: Option<LibTool>,
-    linker_tool: Option<LinkerTool>,
+    compiler_tool:                         Option<CompilerTool>, // TODO: Can be missing for Xbox
+    lib_tool:                              Option<LibTool>,
+    linker_tool:                           Option<LinkerTool>,
 }
 
 #[derive(Debug)]
@@ -46,99 +47,100 @@ pub struct Platform {
 #[derive(Debug)]
 #[rustfmt::skip]
 pub struct CompilerTool {
-    additional_options:                Option<String>,
-    optimization:                      Option<u8>,
-    inline_function_expansion:         Option<u8>,
-    enable_intrinsic_functions:        Option<bool>,
-    omit_frame_pointers:               Option<bool>,
-    enable_fiber_safe_optimizations:   Option<bool>,
+    additional_options:                  Option<String>,
+    optimization:                        Option<u8>,
+    inline_function_expansion:           Option<u8>,
+    enable_intrinsic_functions:          Option<bool>,
+    omit_frame_pointers:                 Option<bool>,
+    enable_fiber_safe_optimizations:     Option<bool>,
     // Requires interpolation: $(SolutionDir)/stlport;
-    additional_include_directories:    Option<Vec<String>>,
+    additional_include_directories:      Option<Vec<String>>,
     // PreprocessorDefinitions="WIN32;NDEBUG;VOSTOK_STATIC_LIBRARIES;MASTER_GOLD;"
-    preprocessor_definitions:          Option<Vec<String>>,
-    string_pooling:                    Option<bool>,
-    minimal_rebuild:                   Option<bool>,
-    exception_handling:                Option<u8>,
-    runtime_library:                   Option<u8>,
-    buffer_security_check:             Option<bool>,
-    enable_enhanced_instruction_set:   Option<u8>,
-    floating_point_model:              Option<u8>,
-    use_precompiled_header:            Option<u8>,
-    precompiled_header_through:        Option<String>,
-    warning_level:                     Option<u8>,
-    detect_64bit_portability_problems: Option<bool>,
-    debug_information_format:          Option<u8>,
-    basic_runtime_checks:              Option<u8>,
-    favor_size_or_speed:               Option<u8>,
-    enable_function_level_linking:     Option<bool>,
-    precompiled_header_file:           Option<String>,
-    whole_program_optimization:        Option<bool>,
-    smaller_type_check:                Option<bool>,
-    assembler_listing_location:        Option<String>,
-    browse_information:                Option<u8>,
-    calling_convention:                Option<u8>,
-    compile_as:                        Option<u8>,
+    preprocessor_definitions:            Option<Vec<String>>,
+    string_pooling:                      Option<bool>,
+    minimal_rebuild:                     Option<bool>,
+    exception_handling:                  Option<u8>,
+    runtime_library:                     Option<u8>,
+    buffer_security_check:               Option<bool>,
+    enable_enhanced_instruction_set:     Option<u8>,
+    floating_point_model:                Option<u8>,
+    use_precompiled_header:              Option<u8>,
+    precompiled_header_through:          Option<String>,
+    warning_level:                       Option<u8>,
+    detect_64bit_portability_problems:   Option<bool>,
+    debug_information_format:            Option<u8>,
+    basic_runtime_checks:                Option<u8>,
+    favor_size_or_speed:                 Option<u8>,
+    enable_function_level_linking:       Option<bool>,
+    precompiled_header_file:             Option<String>,
+    whole_program_optimization:          Option<bool>,
+    smaller_type_check:                  Option<bool>,
+    assembler_listing_location:          Option<String>,
+    browse_information:                  Option<u8>,
+    calling_convention:                  Option<u8>,
+    compile_as:                          Option<u8>,
     // NOTE: can be ';' or ',' separated depending on project
-    disable_specific_warnings:         Option<Vec<String>>,
-    floating_point_exceptions:         Option<bool>,
+    disable_specific_warnings:           Option<Vec<String>>,
+    floating_point_exceptions:           Option<bool>,
     force_conformance_in_for_loop_scope: Option<bool>,
-    generate_preprocessed_file:        Option<u8>,
-    object_file:                       Option<String>,
-    program_data_base_file_name:       Option<String>,
-    runtime_type_info:                 Option<bool>,
-    show_includes:                     Option<bool>,
-    struct_member_alignment:           Option<u8>,
-    suppress_startup_banner:           Option<bool>,
-    use_unicode_response_files:        Option<bool>,
-    execution_bucket:                  Option<u8>,
+    generate_preprocessed_file:          Option<u8>,
+    object_file:                         Option<String>,
+    program_data_base_file_name:         Option<String>,
+    runtime_type_info:                   Option<bool>,
+    show_includes:                       Option<bool>,
+    struct_member_alignment:             Option<u8>,
+    suppress_startup_banner:             Option<bool>,
+    use_unicode_response_files:          Option<bool>,
+    execution_bucket:                    Option<u8>,
 }
 
 #[derive(Debug)]
 #[rustfmt::skip]
 pub struct LinkerTool {
-    additional_options:                  Option<String>,
-    additional_dependencies:             Option<Vec<String>>,
-    output_file:                         Option<String>,
-    link_incremental:                    Option<u8>,
-    additional_library_directories:      Option<Vec<String>>,
-    ignore_default_library_names:        Option<Vec<String>>,
-    module_definition_file:              Option<String>,
-    generate_debug_information:          Option<bool>,
-    program_database_file:               Option<String>,
-    generate_map_file:                   Option<bool>,
-    map_file_name:                       Option<String>,
-    map_exports:                         Option<bool>,
-    sub_system:                          Option<u8>,
-    large_address_aware:                 Option<u8>,
-    optimize_references:                 Option<u8>,
-    enable_comdat_folding:               Option<u8>,
-    randomized_base_address:             Option<u8>,
-    data_execution_prevention:           Option<u8>,
-    import_library:                      Option<String>,
-    target_machine:                      Option<u8>,
-    assembly_debug:                      Option<u8>,
-    assembly_link_resource:              Option<String>,
-    base_address:                        Option<String>,
-    clr_thread_attribute:                Option<u8>,
-    delay_load_dlls:                     Option<Vec<String>>,
-    embed_managed_resource_file:         Option<String>,
-    entry_point_symbol:                  Option<String>,
-    fixed_base_address:                  Option<u8>,
-    generate_manifest:                   Option<bool>,
-    ignore_import_library:               Option<bool>,
-    optimize_for_windows98:              Option<u8>,
-    support_unload_of_delay_loaded_dll:  Option<bool>,
-    version:                             Option<String>,
+    additional_options:                 Option<String>,
+    additional_dependencies:            Option<Vec<String>>,
+    output_file:                        Option<String>,
+    link_incremental:                   Option<u8>,
+    additional_library_directories:     Option<Vec<String>>,
+    ignore_default_library_names:       Option<Vec<String>>,
+    module_definition_file:             Option<String>,
+    generate_debug_information:         Option<bool>,
+    program_database_file:              Option<String>,
+    generate_map_file:                  Option<bool>,
+    map_file_name:                      Option<String>,
+    map_exports:                        Option<bool>,
+    sub_system:                         Option<u8>,
+    large_address_aware:                Option<u8>,
+    optimize_references:                Option<u8>,
+    enable_comdat_folding:              Option<u8>,
+    randomized_base_address:            Option<u8>,
+    data_execution_prevention:          Option<u8>,
+    import_library:                     Option<String>,
+    target_machine:                     Option<u8>,
+    assembly_debug:                     Option<u8>,
+    assembly_link_resource:             Option<String>,
+    base_address:                       Option<String>,
+    clr_thread_attribute:               Option<u8>,
+    delay_load_dlls:                    Option<Vec<String>>,
+    embed_managed_resource_file:        Option<String>,
+    entry_point_symbol:                 Option<String>,
+    fixed_base_address:                 Option<u8>,
+    generate_manifest:                  Option<bool>,
+    ignore_import_library:              Option<bool>,
+    optimize_for_windows98:             Option<u8>,
+    support_unload_of_delay_loaded_dll: Option<bool>,
+    version:                            Option<String>,
 }
 
 #[derive(Debug)]
+#[rustfmt::skip]
 pub struct LibTool {
-    additional_options: Option<String>,
+    additional_options:             Option<String>,
     // Requires interpolation: $(SolutionDir)../binaries/$(PlatformName)/libraries/vostok_$(ProjectName)-static-gold.lib"
-    output_file: Option<String>, // TODO: nvidia\nvt\project\squish.vcproj
+    output_file:                    Option<String>, // TODO: nvidia\nvt\project\squish.vcproj
     additional_library_directories: Option<Vec<String>>,
-    ignore_default_library_names: Option<Vec<String>>,
-    suppress_startup_banner: Option<bool>,
+    ignore_default_library_names:   Option<Vec<String>>,
+    suppress_startup_banner:        Option<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -173,20 +175,21 @@ pub struct FileConfiguration {
 }
 
 #[derive(Debug)]
+#[rustfmt::skip]
 pub struct Tool {
-    name: String,
-    use_precompiled_header: Option<u8>,
-    additional_options: Option<String>,
-    basic_runtime_checks: Option<u8>,
-    disable_specific_warnings: Option<Vec<String>>,
-    generate_preprocessed_file: Option<u8>,
-    object_file: Option<String>,
-    optimization: Option<u8>,
-    precompiled_header_file: Option<String>,
-    precompiled_header_through: Option<String>,
-    preprocessor_definitions: Option<Vec<String>>,
-    show_includes: Option<bool>,
-    warning_level: Option<u8>,
+    name:                        String,
+    use_precompiled_header:      Option<u8>,
+    additional_options:          Option<String>,
+    basic_runtime_checks:        Option<u8>,
+    disable_specific_warnings:   Option<Vec<String>>,
+    generate_preprocessed_file:  Option<u8>,
+    object_file:                 Option<String>,
+    optimization:                Option<u8>,
+    precompiled_header_file:     Option<String>,
+    precompiled_header_through:  Option<String>,
+    preprocessor_definitions:    Option<Vec<String>>,
+    show_includes:               Option<bool>,
+    warning_level:               Option<u8>,
     xml_documentation_file_name: Option<String>,
 }
 
