@@ -1,13 +1,13 @@
 use anyhow::Context;
 
 #[derive(Debug)]
-pub struct Project {
+pub struct VCProject {
     name: String,
     project_type: String,
     version: String,
     guid: String,
     root_namespace: String,
-    keyword: String,
+    keyword: Option<String>, // TODO: freeimage\LibOpenJPEG\LibOpenJPEG.vcproj
     target_framework_version: String,
     platforms: Vec<Platform>,
     configuraitons: Vec<Configuration>,
@@ -19,15 +19,18 @@ pub struct Configuration {
     name: String,
     // Requires interpolation:
     // OutputDirectory="$(SolutionDir)../binaries/$(PlatformName)/intermediates/$(ConfigurationName)/$(ProjectName)"
-    output_directory: String,
+    output_directory: Option<String>, // TODO: Can be missing in game in random config
     // Requires interpolation:
     // IntermediateDirectory="$(SolutionDir)../binaries/$(PlatformName)/intermediates/$(ConfigurationName)/$(ProjectName)"
-    intermediate_directory: String,
-    configuraiton_type: u8, // ??
-    character_set: u8,
+    intermediate_directory: Option<String>, // TODO: Same as above
+    configuraiton_type: u8,                 // ??
+    character_set: Option<u8>,
     whole_program_optimization: bool,
-    compiler_tool: CompilerTool,
-    linker_tool: LinkerTool,
+    managed_extensions: Option<u8>,
+
+    compiler_tool: Option<CompilerTool>, // TODO: Can be missing for Xbox
+    lib_tool: Option<LibTool>,
+    linker_tool: Option<LinkerTool>,
 }
 
 #[derive(Debug)]
@@ -36,36 +39,67 @@ pub struct Platform {
 }
 
 #[derive(Debug)]
+#[rustfmt::skip]
 pub struct CompilerTool {
-    additional_options: String,
-    optimization: u8,
-    inline_function_expansion: u8,
-    enable_intrinsic_functions: bool,
-    omit_frame_pointers: bool,
-    enable_fiber_safe_optimizations: bool,
+    additional_options:                Option<String>,
+    optimization:                      Option<u8>,
+    inline_function_expansion:         Option<u8>,
+    enable_intrinsic_functions:        Option<bool>,
+    omit_frame_pointers:               Option<bool>,
+    enable_fiber_safe_optimizations:   Option<bool>,
     // Requires interpolation: $(SolutionDir)/stlport;
-    additional_include_directories: Vec<String>,
+    additional_include_directories:    Option<Vec<String>>,
     // PreprocessorDefinitions="WIN32;NDEBUG;VOSTOK_STATIC_LIBRARIES;MASTER_GOLD;"
-    preprocessor_definitions: Vec<String>,
-    string_pooling: bool,
-    minimal_rebuild: bool,
-    exception_handling: u8,
-    runtime_library: u8,
-    buffer_security_check: bool,
-    enable_enhanced_instruction_set: u8,
-    floating_point_model: u8,
-    use_precompiled_header: u8,
-    precompiled_header_through: String,
-    warning_level: u8,
-    detect_64bit_portability_problems: bool,
-    debug_information_format: u8,
+    preprocessor_definitions:          Option<Vec<String>>,
+    string_pooling:                    Option<bool>,
+    minimal_rebuild:                   Option<bool>,
+    exception_handling:                Option<u8>,
+    runtime_library:                   Option<u8>,
+    buffer_security_check:             Option<bool>,
+    enable_enhanced_instruction_set:   Option<u8>,
+    floating_point_model:              Option<u8>,
+    use_precompiled_header:            Option<u8>,
+    precompiled_header_through:        Option<String>,
+    warning_level:                     Option<u8>,
+    detect_64bit_portability_problems: Option<bool>,
+    debug_information_format:          Option<u8>,
+    basic_runtime_checks:              Option<u8>,
+    favor_size_or_speed:               Option<u8>,
+    enable_function_level_linking:     Option<bool>,
+    precompiled_header_file:           Option<String>,
+    whole_program_optimization:        Option<bool>,
+    smaller_type_check:                Option<bool>,
 }
 
 #[derive(Debug)]
+#[rustfmt::skip]
 pub struct LinkerTool {
-    additional_options: String,
+    additional_dependencies:        Option<Vec<String>>,
+    output_file:                    Option<String>,
+    link_incremental:               Option<u8>,
+    additional_library_directories: Option<Vec<String>>,
+    ignore_default_library_names:   Option<Vec<String>>,
+    module_definition_file:         Option<String>,
+    generate_debug_information:     Option<bool>,
+    program_database_file:          Option<String>,
+    generate_map_file:              Option<bool>,
+    map_file_name:                  Option<String>,
+    map_exports:                    Option<bool>,
+    sub_system:                     Option<u8>,
+    large_address_aware:            Option<u8>,
+    optimize_references:            Option<u8>,
+    enable_comdat_folding:          Option<u8>,
+    randomized_base_address:        Option<u8>,
+    data_execution_prevention:      Option<u8>,
+    import_library:                 Option<String>,
+    target_machine:                 Option<u8>,
+}
+
+#[derive(Debug)]
+pub struct LibTool {
+    additional_options: Option<String>,
     // Requires interpolation: $(SolutionDir)../binaries/$(PlatformName)/libraries/vostok_$(ProjectName)-static-gold.lib"
-    output_file: String,
+    output_file: Option<String>, // TODO: nvidia\nvt\project\squish.vcproj
 }
 
 #[derive(Debug, Default)]
@@ -77,6 +111,7 @@ pub struct Files {
 #[derive(Debug)]
 pub struct Filter {
     name: String,
+    filter: Option<Vec<String>>,
     filters: Vec<Filter>,
     files: Vec<File>,
 }
@@ -106,15 +141,18 @@ macro_rules! parse_attrs {
         $(optional: $attr_name_opt:literal => $field_opt:ident,)*
         $($attr_name:literal => $field:ident,)*
     }) => {
-        $(let mut $field_opt: Option<&str> = None;)*
         $(let mut $field: Option<&str> = None;)*
+        $(let mut $field_opt: Option<&str> = None;)*
 
         for attr in $node.attributes() {
             match attr.name() {
                 $($ignore)|*|"" => {}
-                $($attr_name_opt => _ = $field_opt.replace(attr.value()),)*
                 $($attr_name => _ = $field.replace(attr.value()),)*
-                attr_name => anyhow::bail!("Unexpected {} attribute: '{attr_name}'", $ctx),
+                $($attr_name_opt => _ = $field_opt.replace(attr.value()),)*
+                attr_name => {
+                    eprintln!("Unexpected {} attribute: '{attr_name}' with value: '{:?}'", $ctx, attr.value());
+                    // anyhow::bail!("Unexpected {} attribute: '{attr_name}' with value: '{}'", $ctx, attr.value()),
+                }
             }
         }
 
@@ -122,7 +160,16 @@ macro_rules! parse_attrs {
     };
 }
 
-impl Project {
+#[rustfmt::skip]
+macro_rules! optparse {
+    ($f:ident: bool)   => { let $f = $f.map(parse_bool).transpose()?; };
+    ($f:ident: String) => { let $f = $f.map(str::to_string); };
+    ($f:ident: Vec<_>) => { let $f = $f.map(parse_list); };
+    ($f:ident: $t:ty)  => { let $f = $f.map(|s| s.parse::<$t>()).transpose()?; };
+}
+
+impl VCProject {
+    #[rustfmt::skip]
     pub fn parse_xml(input: &str) -> anyhow::Result<Self> {
         let xml = roxmltree::Document::parse(input)?;
         let root = xml.root_element();
@@ -131,22 +178,22 @@ impl Project {
         }
 
         parse_attrs!(root, "VisualStudioProject", {
+            optional: "Keyword"                => keyword,
             "ProjectType"            => project_type,
             "Version"                => version,
             "Name"                   => name,
             "ProjectGUID"            => guid,
             "RootNamespace"          => root_namespace,
-            "Keyword"                => keyword,
             "TargetFrameworkVersion" => target_framework_version,
         });
 
-        let project_type = project_type.to_string();
-        let version = version.to_string();
-        let name = name.to_string();
-        let guid = guid.to_string();
-        let root_namespace = root_namespace.to_string();
-        let keyword = keyword.to_string();
+        let project_type             = project_type.to_string();
+        let version                  = version.to_string();
+        let name                     = name.to_string();
+        let guid                     = guid.to_string();
+        let root_namespace           = root_namespace.to_string();
         let target_framework_version = target_framework_version.to_string();
+        optparse!(keyword: String);
 
         let mut platforms: Vec<Platform> = vec![];
         let mut configuraitons: Vec<Configuration> = vec![];
@@ -173,12 +220,36 @@ impl Project {
                 "Files" => {
                     files = Files::parse_xml(child)?;
                 }
-                "ToolFiles" | "References" | "Globals" => {
+                "ToolFiles" => {
                     if child.children().any(|n| n.is_element()) {
                         anyhow::bail!("Expected '{}' to be empty", child.tag_name().name());
                     }
                 }
-                "" => {}
+                "References" => {
+                    // TODO: BugTrapN.vcproj
+                    // <References>
+                    // 	<AssemblyReference
+                    // 		RelativePath="System.dll"
+                    // 		AssemblyName="System, Version=2.0.0.0, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL"
+                    // 		MinFrameworkVersion="131072"
+                    // 	/>
+                    // 	<AssemblyReference
+                    // 		RelativePath="System.Windows.Forms.dll"
+                    // 		AssemblyName="System.Windows.Forms, Version=2.0.0.0, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL"
+                    // 		MinFrameworkVersion="131072"
+                    // 	/>
+                    // </References>
+                }
+                "Globals" => {
+                    // TODO:  'ode\sources\ode.vcproj'
+                    // <Globals>
+                    // 	<Global
+                    // 		Name="DevPartner_IsInstrumented"
+                    // 		Value="0"
+                    // 	/>
+                    // </Globals>
+                }
+                "" => (),
                 tag_name => anyhow::bail!("Unexpected tag name: '{tag_name}'"),
             }
         }
@@ -211,37 +282,43 @@ impl Platform {
 }
 
 impl Configuration {
+    #[rustfmt::skip]
     pub fn parse_xml(node: roxmltree::Node) -> anyhow::Result<Self> {
         parse_attrs!(node, "Configuration", {
+            optional: "WholeProgramOptimization" => whole_program_optimization,
+            optional: "ManagedExtensions" => managed_extensions,
+            optional: "CharacterSet"      => character_set,
+            optional: "OutputDirectory"          => output_directory,
+            optional: "IntermediateDirectory"    => intermediate_directory,
             "Name"                     => name,
-            "OutputDirectory"          => output_directory,
-            "IntermediateDirectory"    => intermediate_directory,
             "ConfigurationType"        => configuraiton_type,
-            "CharacterSet"             => character_set,
-            "WholeProgramOptimization" => whole_program_optimization,
         });
 
-        let name = name.to_string();
-        let output_directory = output_directory.to_string();
-        let intermediate_directory = intermediate_directory.to_string();
-        let configuraiton_type = configuraiton_type.parse()?;
-        let character_set = character_set.parse()?;
-        let whole_program_optimization = parse_bool(whole_program_optimization)?;
+        let name                       = name.to_string();
+        let configuraiton_type         = configuraiton_type.parse::<u8>()?;
+        let whole_program_optimization = parse_bool(whole_program_optimization.unwrap_or("false"))?;
+        optparse!(managed_extensions: u8);
+        optparse!(character_set: u8);
+        optparse!(output_directory: String);
+        optparse!(intermediate_directory: String);
 
         let mut compiler_tool = None;
+        let mut lib_tool = None;
         let mut linker_tool = None;
+
         for child in node
             .children()
             .filter(|n| n.is_element() && n.tag_name().name() == "Tool")
         {
             match child.attribute("Name") {
+                // TODO
                 Some("VCCLCompilerTool") => compiler_tool = Some(CompilerTool::parse_xml(child)?),
-                Some("VCLibrarianTool") => linker_tool = Some(LinkerTool::parse_xml(child)?),
+                Some("VCLibrarianTool") => lib_tool = Some(LibTool::parse_xml(child)?),
+                Some("VCLinkerTool") => linker_tool = Some(LinkerTool::parse_xml(child)?),
                 _ => (),
             }
         }
-        let compiler_tool = compiler_tool.context("Configuration missing VCCLCompilerTool")?;
-        let linker_tool = linker_tool.context("Configuration missing VCLibrarianTool")?;
+
 
         Ok(Self {
             name,
@@ -250,58 +327,76 @@ impl Configuration {
             configuraiton_type,
             character_set,
             whole_program_optimization,
+            managed_extensions,
+
             compiler_tool,
+            lib_tool,
             linker_tool,
         })
     }
 }
 
 impl CompilerTool {
+    #[rustfmt::skip]
     pub fn parse_xml(node: roxmltree::Node) -> anyhow::Result<Self> {
         parse_attrs!(node, "VCCLCompilerTool", {
             ignore: "Name",
-            "AdditionalOptions"              => additional_options,
-            "Optimization"                   => optimization,
-            "InlineFunctionExpansion"        => inline_function_expansion,
-            "EnableIntrinsicFunctions"       => enable_intrinsic_functions,
-            "OmitFramePointers"              => omit_frame_pointers,
-            "EnableFiberSafeOptimizations"   => enable_fiber_safe_optimizations,
-            "AdditionalIncludeDirectories"   => additional_include_directories,
-            "PreprocessorDefinitions"        => preprocessor_definitions,
-            "StringPooling"                  => string_pooling,
-            "MinimalRebuild"                 => minimal_rebuild,
-            "ExceptionHandling"              => exception_handling,
-            "RuntimeLibrary"                 => runtime_library,
-            "BufferSecurityCheck"            => buffer_security_check,
-            "EnableEnhancedInstructionSet"   => enable_enhanced_instruction_set,
-            "FloatingPointModel"             => floating_point_model,
-            "UsePrecompiledHeader"           => use_precompiled_header,
-            "PrecompiledHeaderThrough"       => precompiled_header_through,
-            "WarningLevel"                   => warning_level,
-            "Detect64BitPortabilityProblems" => detect_64bit_portability_problems,
-            "DebugInformationFormat"         => debug_information_format,
+            optional: "AdditionalOptions"              => additional_options,
+            optional: "Optimization"                   => optimization,
+            optional: "InlineFunctionExpansion"        => inline_function_expansion,
+            optional: "EnableIntrinsicFunctions"       => enable_intrinsic_functions,
+            optional: "OmitFramePointers"              => omit_frame_pointers,
+            optional: "EnableFiberSafeOptimizations"   => enable_fiber_safe_optimizations,
+            optional: "AdditionalIncludeDirectories"   => additional_include_directories,
+            optional: "PreprocessorDefinitions"        => preprocessor_definitions,
+            optional: "StringPooling"                  => string_pooling,
+            optional: "MinimalRebuild"                 => minimal_rebuild,
+            optional: "ExceptionHandling"              => exception_handling,
+            optional: "RuntimeLibrary"                 => runtime_library,
+            optional: "BufferSecurityCheck"            => buffer_security_check,
+            optional: "EnableEnhancedInstructionSet"   => enable_enhanced_instruction_set,
+            optional: "FloatingPointModel"             => floating_point_model,
+            optional: "UsePrecompiledHeader"           => use_precompiled_header,
+            optional: "PrecompiledHeaderThrough"       => precompiled_header_through,
+            optional: "WarningLevel"                   => warning_level,
+            optional: "Detect64BitPortabilityProblems" => detect_64bit_portability_problems,
+            optional: "DebugInformationFormat"         => debug_information_format,
+            optional: "BasicRuntimeChecks"             => basic_runtime_checks,
+            optional: "FavorSizeOrSpeed"               => favor_size_or_speed,
+            optional: "EnableFunctionLevelLinking"     => enable_function_level_linking,
+            optional: "PrecompiledHeaderFile"          => precompiled_header_file,
+            optional: "WholeProgramOptimization"       => whole_program_optimization,
+            optional: "SmallerTypeCheck"             => smaller_type_check,
         });
 
-        let additional_options = additional_options.to_string();
-        let optimization = optimization.parse()?;
-        let inline_function_expansion = inline_function_expansion.parse()?;
-        let enable_intrinsic_functions = parse_bool(enable_intrinsic_functions)?;
-        let omit_frame_pointers = parse_bool(omit_frame_pointers)?;
-        let enable_fiber_safe_optimizations = parse_bool(enable_fiber_safe_optimizations)?;
-        let additional_include_directories = parse_list(additional_include_directories);
-        let preprocessor_definitions = parse_list(preprocessor_definitions);
-        let string_pooling = parse_bool(string_pooling)?;
-        let minimal_rebuild = parse_bool(minimal_rebuild)?;
-        let exception_handling = exception_handling.parse()?;
-        let runtime_library = runtime_library.parse()?;
-        let buffer_security_check = parse_bool(buffer_security_check)?;
-        let enable_enhanced_instruction_set = enable_enhanced_instruction_set.parse()?;
-        let floating_point_model = floating_point_model.parse()?;
-        let use_precompiled_header = use_precompiled_header.parse()?;
-        let precompiled_header_through = precompiled_header_through.to_string();
-        let warning_level = warning_level.parse()?;
-        let detect_64bit_portability_problems = parse_bool(detect_64bit_portability_problems)?;
-        let debug_information_format = debug_information_format.parse()?;
+        optparse!(additional_options:                String);
+        optparse!(optimization:                      u8);
+        optparse!(inline_function_expansion:         u8);
+        optparse!(enable_intrinsic_functions:        bool);
+        optparse!(omit_frame_pointers:               bool);
+        optparse!(enable_fiber_safe_optimizations:   bool);
+        optparse!(additional_include_directories:    Vec<_>);
+        optparse!(preprocessor_definitions:          Vec<_>);
+        optparse!(string_pooling:                    bool);
+        optparse!(minimal_rebuild:                   bool);
+        optparse!(exception_handling:                u8);
+        optparse!(runtime_library:                   u8);
+        optparse!(buffer_security_check:             bool);
+        optparse!(enable_enhanced_instruction_set:   u8);
+        optparse!(floating_point_model:              u8);
+        optparse!(use_precompiled_header:            u8);
+        optparse!(precompiled_header_through:        String);
+        optparse!(warning_level:                     u8);
+        optparse!(detect_64bit_portability_problems: bool);
+        optparse!(debug_information_format:          u8);
+        optparse!(basic_runtime_checks:              u8);
+        optparse!(favor_size_or_speed:               u8);
+        optparse!(enable_function_level_linking:     bool);
+        optparse!(precompiled_header_file:           String);
+        optparse!(whole_program_optimization:        bool);
+        optparse!(smaller_type_check:        bool);
+
+
 
         Ok(Self {
             additional_options,
@@ -324,20 +419,96 @@ impl CompilerTool {
             warning_level,
             detect_64bit_portability_problems,
             debug_information_format,
+            basic_runtime_checks,
+            favor_size_or_speed,
+            enable_function_level_linking,
+            precompiled_header_file,
+            whole_program_optimization,
+            smaller_type_check,
         })
     }
 }
 
 impl LinkerTool {
+    #[rustfmt::skip]
+    pub fn parse_xml(node: roxmltree::Node) -> anyhow::Result<Self> {
+        parse_attrs!(node, "VCLinkerTool", {
+            ignore: "Name",
+            optional: "AdditionalDependencies"        => additional_dependencies,
+            optional: "OutputFile"                    => output_file,
+            optional: "LinkIncremental"               => link_incremental,
+            optional: "AdditionalLibraryDirectories"  => additional_library_directories,
+            optional: "IgnoreDefaultLibraryNames"     => ignore_default_library_names,
+            optional: "ModuleDefinitionFile"          => module_definition_file,
+            optional: "GenerateDebugInformation"      => generate_debug_information,
+            optional: "ProgramDatabaseFile"           => program_database_file,
+            optional: "GenerateMapFile"               => generate_map_file,
+            optional: "MapFileName"                   => map_file_name,
+            optional: "MapExports"                    => map_exports,
+            optional: "SubSystem"                     => sub_system,
+            optional: "LargeAddressAware"             => large_address_aware,
+            optional: "OptimizeReferences"            => optimize_references,
+            optional: "EnableCOMDATFolding"           => enable_comdat_folding,
+            optional: "RandomizedBaseAddress"         => randomized_base_address,
+            optional: "DataExecutionPrevention"       => data_execution_prevention,
+            optional: "ImportLibrary"                 => import_library,
+            optional: "TargetMachine"                 => target_machine,
+        });
+
+        optparse!(additional_dependencies: Vec<_>);
+        optparse!(output_file: String);
+        optparse!(link_incremental: u8);
+        optparse!(additional_library_directories: Vec<_>);
+        optparse!(ignore_default_library_names: Vec<_>);
+        optparse!(module_definition_file: String);
+        optparse!(generate_debug_information: bool);
+        optparse!(program_database_file: String);
+        optparse!(generate_map_file: bool);
+        optparse!(map_file_name: String);
+        optparse!(map_exports: bool);
+        optparse!(sub_system: u8);
+        optparse!(large_address_aware: u8);
+        optparse!(optimize_references: u8);
+        optparse!(enable_comdat_folding: u8);
+        optparse!(randomized_base_address: u8);
+        optparse!(data_execution_prevention: u8);
+        optparse!(import_library: String);
+        optparse!(target_machine: u8);
+
+        Ok(Self {
+            additional_dependencies,
+            output_file,
+            link_incremental,
+            additional_library_directories,
+            ignore_default_library_names,
+            module_definition_file,
+            generate_debug_information,
+            program_database_file,
+            generate_map_file,
+            map_file_name,
+            map_exports,
+            sub_system,
+            large_address_aware,
+            optimize_references,
+            enable_comdat_folding,
+            randomized_base_address,
+            data_execution_prevention,
+            import_library,
+            target_machine,
+        })
+    }
+}
+
+impl LibTool {
     pub fn parse_xml(node: roxmltree::Node) -> anyhow::Result<Self> {
         parse_attrs!(node, "VCLibrarianTool", {
             ignore: "Name",
-            "AdditionalOptions" => additional_options,
-            "OutputFile"        => output_file,
+            optional: "AdditionalOptions" => additional_options,
+            optional: "OutputFile"        => output_file,
         });
 
-        let additional_options = additional_options.to_string();
-        let output_file = output_file.to_string();
+        optparse!(additional_options: String);
+        optparse!(output_file: String);
 
         Ok(Self {
             additional_options,
@@ -355,7 +526,8 @@ impl Files {
             match child.tag_name().name() {
                 "Filter" => filters.push(Filter::parse_xml(child)?),
                 "File" => files.push(File::parse_xml(child)?),
-                tag => anyhow::bail!("Unexpected tag in Files: '{tag}'"),
+                tag => eprintln!("Unexpected tag in Files: '{tag}'"),
+                // tag => anyhow::bail!("Unexpected tag in Files: '{tag}'"),
             }
         }
 
@@ -366,10 +538,12 @@ impl Files {
 impl Filter {
     pub fn parse_xml(node: roxmltree::Node) -> anyhow::Result<Self> {
         parse_attrs!(node, "Filter", {
+            optional: "Filter" => filter,
             "Name" => name,
         });
 
         let name = name.to_string();
+        optparse!(filter: Vec<_>);
 
         let mut filters = vec![];
         let mut files = vec![];
@@ -378,12 +552,15 @@ impl Filter {
             match child.tag_name().name() {
                 "Filter" => filters.push(Filter::parse_xml(child)?),
                 "File" => files.push(File::parse_xml(child)?),
-                tag => anyhow::bail!("Unexpected tag in Filter: '{tag}'"),
+                tag => eprintln!("Unexpected tag in Filter: '{tag}'"),
+                // tag => anyhow::bail!("Unexpected tag in Filter: '{tag}'"),
             }
         }
 
         Ok(Self {
             name,
+            filter,
+
             filters,
             files,
         })
@@ -414,7 +591,8 @@ impl File {
                     file_configurations.push(file_configuration)
                 }
                 "Tool" => {}
-                tag => anyhow::bail!("Unexpected tag in File: '{tag}'"),
+                tag => eprintln!("Unexpected tag in File: '{tag}'"),
+                // tag => anyhow::bail!("Unexpected tag in File: '{tag}'"),
             }
         }
 
@@ -471,7 +649,7 @@ fn parse_bool(s: &str) -> anyhow::Result<bool> {
     match s {
         "1" | "TRUE" | "true" => Ok(true),
         "0" | "FALSE" | "false" => Ok(false),
-        _ => anyhow::bail!("Unexpected boolean value: {s}"),
+        _ => anyhow::bail!("Unexpected boolean value: '{s}'"),
     }
 }
 

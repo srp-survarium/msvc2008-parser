@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use nom::{
     bytes::complete::{tag, take_until, take_until1, take_while, take_while1},
     character::complete::{char, digit1},
@@ -6,7 +8,11 @@ use nom::{
     sequence::{preceded, terminated},
     Parser,
 };
-use uuid::Uuid;
+use uuid::{uuid, Uuid};
+
+const VS_SOLUTION_FOLDER: Uuid = uuid!("2150E333-8FDC-42A3-9474-1A3956D46DE8");
+const VS_CPP_PROJECT: Uuid = uuid!("8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942");
+const VS_CSHARP_PROJECT: Uuid = uuid!("FAE04EC0-301F-11D3-BF4B-00C04F79EFBC");
 
 #[derive(Debug)]
 pub struct Sln {
@@ -14,9 +20,9 @@ pub struct Sln {
     pub global: Global,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Project {
-    pub up_uuid: Uuid,
+    pub kind: ProjectKind,
     pub name: String,
     pub path: String,
     pub uuid: Uuid,
@@ -24,18 +30,24 @@ pub struct Project {
     pub section_dependencies: Option<SectionDependencies>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProjectKind {
+    Folder,
+    Cpp,
+    CSharp,
+}
+
+#[derive(Debug)]
 pub struct SectionDependencies {
     pub deps: Vec<SectionDependency>,
 }
 
 #[derive(Debug)]
 pub struct SectionDependency {
-    pub from: Uuid,
-    pub to: Uuid,
+    pub uuid: Uuid,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Global {
     pub sln_platforms: SolutionConfigurationPlatforms, // pre
     pub cfg_platforms: ProjectConfigurationPlatforms,  // post
@@ -43,22 +55,22 @@ pub struct Global {
     pub nested_projects: NestedProjects,               // pre
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct SolutionConfigurationPlatforms {
     pub platforms: Vec<SolutionConfigurationPlatform>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct SolutionConfigurationPlatform {
     pub platform: ConfigurationPlatform,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ProjectConfigurationPlatforms {
     pub platforms: Vec<ProjectConfigurationPlatform>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ProjectConfigurationPlatform {
     pub uuid: Uuid,
     pub target_cfg: ConfigurationPlatform,
@@ -66,27 +78,71 @@ pub struct ProjectConfigurationPlatform {
     pub is_enabled: bool,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct SolutionProperties {
     pub hide_solution_node: bool,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct NestedProjects {
     pub projects: Vec<NestedProject>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct NestedProject {
     pub from: Uuid,
     pub to: Uuid,
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ConfigurationPlatform {
     pub build_kind: String,
     pub platform_name: String,
 }
+
+impl Sln {
+    pub fn find_project_dependencies(&self, project_name: &str) -> Option<Vec<&Project>> {
+        let mut result = vec![];
+
+        let mut projects = self
+            .projects
+            .iter()
+            .map(|project| (project.uuid, project))
+            .collect::<HashMap<_, _>>();
+
+        let project_uuid = self
+            .projects
+            .iter()
+            .find(|project| project_name == project.name)?
+            .uuid;
+
+        let mut project_stack = vec![project_uuid];
+
+        while let Some(project_uuid) = project_stack.pop() {
+            let Some(project) = projects.remove(&project_uuid) else {
+                // This assumes project is well-formed.
+                continue;
+            };
+
+            result.push(project);
+
+            if let Some(section_dependencies) = &project.section_dependencies {
+                for section_dependency in &section_dependencies.deps {
+                    project_stack.push(section_dependency.uuid);
+                }
+            }
+        }
+
+        // From least-specific to most-specific one
+        result.reverse();
+
+        Some(result)
+    }
+}
+
+//
+// Parsing
+//
 
 impl Sln {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
@@ -118,9 +174,17 @@ impl Project {
     pub fn parse(i: &str) -> nom::IResult<&str, Self> {
         let (i, _) = tag("Project").parse(i)?;
 
-        let (i, up_uuid) = parse_parentheses(i)?;
-        let (j, up_uuid) = parse_uuid(up_uuid)?;
+        let (i, project_uuid) = parse_parentheses(i)?;
+        let (j, project_uuid) = parse_uuid(project_uuid)?;
         assert_eq!(j, "");
+
+        // TODO: Its own function + better error handling
+        let kind = match () {
+            () if project_uuid == VS_SOLUTION_FOLDER => ProjectKind::Folder,
+            () if project_uuid == VS_CPP_PROJECT => ProjectKind::Cpp,
+            () if project_uuid == VS_CSHARP_PROJECT => ProjectKind::CSharp,
+            () => panic!("Unknown project uuid: {project_uuid}"),
+        };
 
         let (i, _) = charsep('=').parse(i)?;
 
@@ -141,7 +205,7 @@ impl Project {
         Ok((
             i,
             Self {
-                up_uuid,
+                kind,
                 name: name.to_string(),
                 path: path.to_string(),
                 uuid,
@@ -172,8 +236,9 @@ impl SectionDependency {
 
         let (i, to) = parse_uuid_raw(i)?;
         let (i, _) = sp(i)?;
+        assert_eq!(from, to);
 
-        Ok((i, Self { from, to }))
+        Ok((i, Self { uuid: from }))
     }
 }
 
@@ -439,10 +504,7 @@ EndProject
         let project = Project::parse(input).unwrap().1;
         assert_eq!(project.name, "survarium");
         assert_eq!(project.path, "survarium");
-        assert_eq!(
-            project.up_uuid,
-            Uuid::parse_str("{2150E333-8FDC-42A3-9474-1A3956D46DE8}").unwrap()
-        );
+        assert_eq!(project.kind, ProjectKind::Folder);
         assert_eq!(
             project.uuid,
             Uuid::parse_str("{4E2399DA-D511-4F61-ACCB-894F87214FC5}").unwrap()
