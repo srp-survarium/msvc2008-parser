@@ -54,9 +54,31 @@ fn main() -> anyhow::Result<()> {
         }
 
         let vcproj = std::fs::read_to_string(&project_path)?;
-        let _vcproj = vcproj::VCProject::parse_xml(&vcproj)
+        let mut vcproj = vcproj::VCProject::parse_xml(&vcproj)
             .with_context(|| format!("Failed parsing '{}' at '{}'", dep.name, dep.path))?;
+
+        vcproj
+            .configurations
+            .retain(|config| config.name == "Release|Win32" || config.name == "Master Gold|Win32");
+        vcproj.platforms = Default::default();
+        vcproj.files = vcproj::Files::default();
+
+        for cfg in vcproj.configurations {
+            if let Some(cl) = &cfg.compiler_tool {
+                println!("[{}] [{}]: {}", vcproj.name, cfg.name, cl.to_flags(&cfg));
+            }
+        }
+
+        // println!("[{}]\n {}\n", vcproj.name, skip_nones(&vcproj));
     }
 
     Ok(())
+}
+
+fn skip_nones(object: impl std::fmt::Debug) -> String {
+    format!("{object:#?}")
+        .lines()
+        .filter(|line| !line.contains("None"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }

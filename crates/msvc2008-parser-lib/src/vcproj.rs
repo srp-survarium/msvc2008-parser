@@ -1,5 +1,5 @@
 use anyhow::Context;
-use msvc2008_parser_proc::{flag_enum, ParseXml};
+use msvc2008_parser_proc::{ParseXml, flag_enum};
 
 #[derive(Debug, ParseXml)]
 pub struct VCProject {
@@ -29,18 +29,19 @@ pub struct Configuration {
     // Requires interpolation:
     // IntermediateDirectory="$(SolutionDir)../binaries/$(PlatformName)/intermediates/$(ConfigurationName)/$(ProjectName)"
     pub intermediate_directory: Option<String>, // TODO: Same as above
-    pub configuration_type: u8,                 // ??
-    pub character_set: Option<u8>,
+
+    pub configuration_type: ConfigurationType, // ??
+    pub character_set: Option<CharacterSet>,
     pub whole_program_optimization: Option<bool>,
-    pub managed_extensions: Option<u8>,
+    pub managed_extensions: Option<ManagedExtensions>,
     #[rename("ATLMinimizesCRunTimeLibraryUsage")]
     pub atl_minimizes_c_runtime_library_usage: Option<bool>,
     pub delete_extensions_on_clean: Option<String>,
     pub inherited_property_sheets: Option<Vec<String>>,
     #[rename("UseOfATL")]
-    pub use_of_atl: Option<u8>,
+    pub use_of_atl: Option<UseOfATL>,
     #[rename("UseOfMFC")]
-    pub use_of_mfc: Option<i8>,
+    pub use_of_mfc: Option<UseOfMFC>,
 
     #[skip]
     pub compiler_tool: Option<CompilerTool>, // TODO: Can be missing for Xbox
@@ -56,55 +57,61 @@ pub struct Platform {
 }
 
 #[derive(Debug, ParseXml)]
-#[parse_xml(tag = "VCCLCompilerTool", ignore = "Name")]
+#[parse_xml(
+    tag = "VCCLCompilerTool",
+    ignore = "Name",
+    ignore = "ExecutionBucket" // u8 -- VS related flag for parallelism. `ogg` and `vorbis` set it to '7'.
+    ignore = "UseUnicodeResponseFiles", // bool -- VS related flag
+)]
 pub struct CompilerTool {
     pub additional_options: Option<String>,
-    pub optimization: Option<u8>,
-    pub inline_function_expansion: Option<u8>,
-    pub enable_intrinsic_functions: Option<bool>,
-    pub omit_frame_pointers: Option<bool>,
-    pub enable_fiber_safe_optimizations: Option<bool>,
-    // Requires interpolation: $(SolutionDir)/stlport;
-    pub additional_include_directories: Option<Vec<String>>,
-    // PreprocessorDefinitions="WIN32;NDEBUG;VOSTOK_STATIC_LIBRARIES;MASTER_GOLD;"
-    pub preprocessor_definitions: Option<Vec<String>>,
-    pub string_pooling: Option<bool>,
-    pub minimal_rebuild: Option<bool>,
-    pub exception_handling: Option<u8>,
-    pub runtime_library: Option<u8>,
-    pub buffer_security_check: Option<bool>,
-    pub enable_enhanced_instruction_set: Option<u8>,
-    pub floating_point_model: Option<u8>,
-    pub use_precompiled_header: Option<u8>,
-    pub precompiled_header_through: Option<String>,
-    pub warning_level: Option<u8>,
-    pub detect_64_bit_portability_problems: Option<bool>,
-    pub debug_information_format: Option<u8>,
-    pub basic_runtime_checks: Option<u8>,
-    pub favor_size_or_speed: Option<u8>,
-    pub enable_function_level_linking: Option<bool>,
-    pub precompiled_header_file: Option<String>,
-    pub whole_program_optimization: Option<bool>,
-    pub smaller_type_check: Option<bool>,
+
+    pub optimization: Option<Optimization>,
+    pub inline_function_expansion: Option<InlineFunctionExpansion>,
+    pub enable_intrinsic_functions: Option<EnableIntrinsicFunctions>,
+    pub omit_frame_pointers: Option<OmitFramePointers>,
+    pub enable_fiber_safe_optimizations: Option<EnableFiberSafeOptimizations>,
+    pub favor_size_or_speed: Option<FavorSizeOrSpeed>,
+    pub whole_program_optimization: Option<WholeProgramOptimization>,
+    pub string_pooling: Option<StringPooling>,
+    pub exception_handling: Option<ExceptionHandling>,
+    pub runtime_library: Option<RuntimeLibrary>,
+    pub buffer_security_check: Option<BufferSecurityCheck>,
+    pub enable_enhanced_instruction_set: Option<EnableEnhancedInstructionSet>,
+    pub floating_point_model: Option<FloatingPointModel>,
+    pub warning_level: Option<WarningLevel>,
+    pub debug_information_format: Option<DebugInformationFormat>,
+    pub use_precompiled_header: Option<UsePrecompiledHeader>,
+    pub compile_as: Option<CompileAs>,
+    pub runtime_type_info: Option<RuntimeTypeInfo>,
+
+    pub minimal_rebuild: Option<MinimalRebuild>,
+    pub basic_runtime_checks: Option<BasicRuntimeChecks>,
+    pub enable_function_level_linking: Option<EnableFunctionLevelLinking>,
+    pub smaller_type_check: Option<SmallerTypeCheck>,
+    pub browse_information: Option<BrowseInformation>,
+    pub calling_convention: Option<CallingConvention>,
+    pub floating_point_exceptions: Option<FloatingPointExceptions>,
+    pub force_conformance_in_for_loop_scope: Option<ForceConformanceInForLoopScope>,
+    pub generate_preprocessed_file: Option<GeneratePreprocessedFile>,
+    pub show_includes: Option<ShowIncludes>,
+    pub struct_member_alignment: Option<StructMemberAlignment>,
+    pub suppress_startup_banner: Option<SuppressStartupBanner>,
+    pub detect_64_bit_portability_problems: Option<Detect64BitPortabilityProblems>,
+
+    pub object_file: Option<String>,
+    pub program_data_base_file_name: Option<String>,
     pub assembler_listing_location: Option<String>,
-    pub browse_information: Option<u8>,
-    pub calling_convention: Option<u8>,
-    pub compile_as: Option<u8>,
+    pub precompiled_header_through: Option<String>,
+    pub precompiled_header_file: Option<String>,
     // NOTE: can be ';' or ',' separated depending on project
     // TODO: Forgot how I wrote this, XD
     // TODO: We might not want to split this at all
     pub disable_specific_warnings: Option<Vec<String>>,
-    pub floating_point_exceptions: Option<bool>,
-    pub force_conformance_in_for_loop_scope: Option<bool>,
-    pub generate_preprocessed_file: Option<u8>,
-    pub object_file: Option<String>,
-    pub program_data_base_file_name: Option<String>,
-    pub runtime_type_info: Option<bool>,
-    pub show_includes: Option<bool>,
-    pub struct_member_alignment: Option<u8>,
-    pub suppress_startup_banner: Option<bool>,
-    pub use_unicode_response_files: Option<bool>,
-    pub execution_bucket: Option<u8>,
+    // Requires interpolation: $(SolutionDir)/stlport;
+    pub additional_include_directories: Option<Vec<String>>,
+    // PreprocessorDefinitions="WIN32;NDEBUG;VOSTOK_STATIC_LIBRARIES;MASTER_GOLD;"
+    pub preprocessor_definitions: Option<Vec<String>>,
 }
 
 #[derive(Debug, ParseXml)]
@@ -113,7 +120,7 @@ pub struct LinkerTool {
     pub additional_options: Option<String>,
     pub additional_dependencies: Option<Vec<String>>,
     pub output_file: Option<String>,
-    pub link_incremental: Option<u8>,
+    pub link_incremental: Option<LinkIncremental>,
     pub additional_library_directories: Option<Vec<String>>,
     pub ignore_default_library_names: Option<Vec<String>>,
     pub module_definition_file: Option<String>,
@@ -122,28 +129,28 @@ pub struct LinkerTool {
     pub generate_map_file: Option<bool>,
     pub map_file_name: Option<String>,
     pub map_exports: Option<bool>,
-    pub sub_system: Option<u8>,
-    pub large_address_aware: Option<u8>,
-    pub optimize_references: Option<u8>,
+    pub sub_system: Option<SubSystem>,
+    pub large_address_aware: Option<LargeAddressAware>,
+    pub optimize_references: Option<OptimizeReferences>,
     #[rename("EnableCOMDATFolding")]
-    pub enable_comdat_folding: Option<u8>,
-    pub randomized_base_address: Option<u8>,
-    pub data_execution_prevention: Option<u8>,
+    pub enable_comdat_folding: Option<EnableCOMDATFolding>,
+    pub randomized_base_address: Option<RandomizedBaseAddress>,
+    pub data_execution_prevention: Option<DataExecutionPrevention>,
     pub import_library: Option<String>,
-    pub target_machine: Option<u8>,
-    pub assembly_debug: Option<u8>,
+    pub target_machine: Option<TargetMachine>,
+    pub assembly_debug: Option<AssemblyDebug>,
     pub assembly_link_resource: Option<String>,
     pub base_address: Option<String>,
     #[rename("CLRThreadAttribute")]
-    pub clr_thread_attribute: Option<u8>,
+    pub clr_thread_attribute: Option<CLRThreadAttribute>,
     #[rename("DelayLoadDLLs")]
     pub delay_load_dlls: Option<Vec<String>>,
     pub embed_managed_resource_file: Option<String>,
     pub entry_point_symbol: Option<String>,
-    pub fixed_base_address: Option<u8>,
+    pub fixed_base_address: Option<FixedBaseAddress>,
     pub generate_manifest: Option<bool>,
     pub ignore_import_library: Option<bool>,
-    pub optimize_for_windows98: Option<u8>,
+    pub optimize_for_windows98: Option<OptimizeForWindows98>,
     #[rename("SupportUnloadOfDelayLoadedDLL")]
     pub support_unload_of_delay_loaded_dll: Option<bool>,
     pub version: Option<String>,
@@ -157,7 +164,7 @@ pub struct LibTool {
     pub output_file: Option<String>, // TODO: nvidia\nvt\project\squish.vcproj
     pub additional_library_directories: Option<Vec<String>>,
     pub ignore_default_library_names: Option<Vec<String>>,
-    pub suppress_startup_banner: Option<bool>,
+    pub suppress_startup_banner: Option<SuppressStartupBanner>,
 }
 
 #[derive(Debug, Default)]
@@ -202,21 +209,66 @@ pub struct FileConfiguration {
 #[derive(Debug, Default, ParseXml)]
 pub struct Tool {
     pub name: String,
-    pub use_precompiled_header: Option<u8>,
+    pub use_precompiled_header: Option<UsePrecompiledHeader>,
     pub additional_options: Option<String>,
-    pub basic_runtime_checks: Option<u8>,
+    pub basic_runtime_checks: Option<BasicRuntimeChecks>,
     pub disable_specific_warnings: Option<Vec<String>>,
-    pub generate_preprocessed_file: Option<u8>,
+    pub generate_preprocessed_file: Option<GeneratePreprocessedFile>,
     pub object_file: Option<String>,
-    pub optimization: Option<u8>,
+    pub optimization: Option<Optimization>,
     pub precompiled_header_file: Option<String>,
     pub precompiled_header_through: Option<String>,
     pub preprocessor_definitions: Option<Vec<String>>,
-    pub show_includes: Option<bool>,
-    pub warning_level: Option<u8>,
+    pub show_includes: Option<ShowIncludes>,
+    pub warning_level: Option<WarningLevel>,
     #[rename("XMLDocumentationFileName")]
     pub xml_documentation_file_name: Option<String>,
 }
+
+//
+// Configuration flags
+//
+
+flag_enum! {
+    enum ConfigurationType {
+        1 => "exe",
+        2 => "dll",
+        4 => "lib",
+        10 => "utility",
+    }
+}
+flag_enum! {
+    enum CharacterSet {
+        0 => "",
+        1 => "_MBCS",
+        2 => "_UNICODE",
+    }
+}
+flag_enum! {
+    enum ManagedExtensions {
+        0 => "",
+        1 => "/clr",
+    }
+}
+flag_enum! {
+    enum UseOfATL {
+        0 => "",
+        1 => "/ATL:static",
+        2 => "/ATL:dynamic",
+    }
+}
+flag_enum! {
+    enum UseOfMFC {
+        -1 => "", // Means not applicable. Set specifically on Xbox (TODO: Requires verification)
+        0 => "",
+        1 => "/MFC:static",
+        2 => "/MFC:dynamic",
+    }
+}
+
+//
+// Compiler flags
+//
 
 flag_enum! {
     enum Optimization {
@@ -224,6 +276,480 @@ flag_enum! {
         1 => "/O1",
         2 => "/O2",
         3 => "/Ox",
+    }
+}
+flag_enum! {
+    enum InlineFunctionExpansion {
+        0 => "",
+        1 => "/Ob1",
+        2 => "/Ob2",
+    }
+}
+flag_enum! {
+    enum EnableIntrinsicFunctions {
+        false => "",
+        true => "/Oi",
+    }
+}
+flag_enum! {
+    enum OmitFramePointers {
+        false => "",
+        true => "/Oy",
+    }
+}
+flag_enum! {
+    enum EnableFiberSafeOptimizations {
+        false => "",
+        true => "/GT",
+    }
+}
+flag_enum! {
+    enum FavorSizeOrSpeed {
+        0 => "",
+        1 => "/Ot",
+        2 => "/Os",
+    }
+}
+flag_enum! {
+    enum WholeProgramOptimization {
+        false => "",
+        true => "/GL",
+    }
+}
+flag_enum! {
+    enum StringPooling {
+        false => "",
+        true => "/GF",
+    }
+}
+flag_enum! {
+    enum ExceptionHandling {
+        0 => "",
+        1 => "/EHsc",
+        2 => "/EHa",
+    }
+}
+flag_enum! {
+    enum RuntimeLibrary {
+        0 => "/MT",
+        1 => "/MTd",
+        2 => "/MD",
+        3 => "/MDd",
+    }
+}
+flag_enum! {
+    enum BufferSecurityCheck {
+        false => "/GS-",
+        true => "",
+    }
+}
+flag_enum! {
+    enum EnableEnhancedInstructionSet {
+        0 => "",
+        1 => "/arch:SSE",
+        2 => "/arch:SSE2",
+    }
+}
+flag_enum! {
+    enum FloatingPointModel {
+        0 => "/fp:precise",
+        1 => "/fp:strict",
+        2 => "/fp:fast",
+    }
+}
+flag_enum! {
+    enum WarningLevel {
+        0 => "/W0",
+        1 => "/W1",
+        2 => "/W2",
+        3 => "/W3",
+        4 => "/W4",
+    }
+}
+flag_enum! {
+    enum DebugInformationFormat {
+        0 => "",
+        1 => "/Z7",
+        3 => "/Zi",
+        4 => "/ZI",
+    }
+}
+flag_enum! {
+    enum UsePrecompiledHeader {
+        0 => "",
+        1 => "/Yc",
+        2 => "/Yu",
+    }
+}
+flag_enum! {
+    enum CompileAs {
+        0 => "",
+        1 => "/TC",
+        2 => "/TP",
+    }
+}
+flag_enum! {
+    enum RuntimeTypeInfo {
+        false => "/GR-",
+        true => "/GR",
+    }
+}
+flag_enum! {
+    enum MinimalRebuild {
+        false => "",
+        true => "/Gm",
+    }
+}
+flag_enum! {
+    enum EnableFunctionLevelLinking {
+        false => "",
+        true => "/Gy",
+    }
+}
+flag_enum! {
+    enum SmallerTypeCheck {
+        false => "",
+        true => "/RTCc",
+    }
+}
+flag_enum! {
+    enum FloatingPointExceptions {
+        false => "",
+        true => "/fp:except",
+    }
+}
+flag_enum! {
+    enum ForceConformanceInForLoopScope {
+        false => "",
+        true => "/Zc:forScope",
+    }
+}
+flag_enum! {
+    enum ShowIncludes {
+        false => "",
+        true => "/showIncludes",
+    }
+}
+flag_enum! {
+    enum SuppressStartupBanner {
+        false => "",
+        true => "/nologo",
+    }
+}
+flag_enum! {
+    enum BasicRuntimeChecks {
+        0 => "",
+        1 => "/RTCs",
+        2 => "/RTCu",
+        3 => "/RTC1",
+    }
+}
+flag_enum! {
+    enum BrowseInformation {
+        0 => "",
+        1 => "/FR",
+        2 => "/Fr",
+    }
+}
+flag_enum! {
+    enum CallingConvention {
+        0 => "/Gd",
+        1 => "/Gr",
+        2 => "/Gz",
+    }
+}
+flag_enum! {
+    enum GeneratePreprocessedFile {
+        0 => "",
+        1 => "/P",
+        2 => "/EP /P",
+    }
+}
+flag_enum! {
+    enum StructMemberAlignment {
+        0 => "",
+        1 => "/Zp1",
+        2 => "/Zp2",
+        3 => "/Zp4",
+        4 => "/Zp8",
+        5 => "/Zp16",
+    }
+}
+flag_enum! {
+    enum Detect64BitPortabilityProblems {
+        false => "",
+        true => "/Wp64",
+    }
+}
+
+//
+
+flag_enum! {
+    enum GenerateProgramDatabase {
+        false => "",
+        true => "/FD",
+    }
+}
+
+flag_enum! {
+    enum CompileOnly {
+        false => "",
+        true => "/c",
+    }
+}
+
+//
+// Linker flags
+//
+
+flag_enum! {
+    enum LinkIncremental {
+        0 => "",
+        1 => "/INCREMENTAL:NO",
+        2 => "/INCREMENTAL",
+    }
+}
+flag_enum! {
+    enum SubSystem {
+        0 => "",
+        1 => "/SUBSYSTEM:CONSOLE",
+        2 => "/SUBSYSTEM:WINDOWS",
+        3 => "/SUBSYSTEM:NATIVE",
+        4 => "/SUBSYSTEM:EFI_APPLICATION",
+        5 => "/SUBSYSTEM:EFI_BOOT_SERVICE_DRIVER",
+        6 => "/SUBSYSTEM:EFI_ROM",
+        7 => "/SUBSYSTEM:EFI_RUNTIME_DRIVER",
+        8 => "/SUBSYSTEM:WINDOWSCE",
+    }
+}
+flag_enum! {
+    enum LargeAddressAware {
+        0 => "",
+        1 => "/LARGEADDRESSAWARE:NO",
+        2 => "/LARGEADDRESSAWARE",
+    }
+}
+flag_enum! {
+    enum OptimizeReferences {
+        0 => "",
+        1 => "/OPT:NOREF",
+        2 => "/OPT:REF",
+    }
+}
+flag_enum! {
+    enum EnableCOMDATFolding {
+        0 => "",
+        1 => "/OPT:NOICF",
+        2 => "/OPT:ICF",
+    }
+}
+flag_enum! {
+    enum RandomizedBaseAddress {
+        0 => "",
+        1 => "/DYNAMICBASE:NO",
+        2 => "/DYNAMICBASE",
+    }
+}
+flag_enum! {
+    enum DataExecutionPrevention {
+        0 => "",
+        1 => "/NXCOMPAT:NO",
+        2 => "/NXCOMPAT",
+    }
+}
+flag_enum! {
+    enum TargetMachine {
+        0 => "",
+        1 => "/MACHINE:X86",
+        3 => "/MACHINE:ARM",
+        4 => "/MACHINE:EBC",
+        5 => "/MACHINE:IA64",
+        7 => "/MACHINE:MIPS",
+        8 => "/MACHINE:MIPS16",
+        9 => "/MACHINE:MIPSFPU",
+        10 => "/MACHINE:MIPSFPU16",
+        14 => "/MACHINE:SH4",
+        16 => "/MACHINE:THUMB",
+        17 => "/MACHINE:X64",
+    }
+}
+flag_enum! {
+    enum AssemblyDebug {
+        0 => "",
+        1 => "/ASSEMBLYDEBUG",
+        2 => "/ASSEMBLYDEBUG:DISABLE",
+    }
+}
+flag_enum! {
+    enum CLRThreadAttribute {
+        0 => "/CLRTHREADATTRIBUTE:NONE",
+        1 => "/CLRTHREADATTRIBUTE:MTA",
+        2 => "/CLRTHREADATTRIBUTE:STA",
+    }
+}
+flag_enum! {
+    enum FixedBaseAddress {
+        0 => "",
+        1 => "/FIXED:NO",
+        2 => "/FIXED",
+    }
+}
+flag_enum! {
+    enum OptimizeForWindows98 {
+        0 => "",
+        1 => "",  // MSVS only, no linker flag
+        2 => "",  // MSVS only, no linker flag
+    }
+}
+
+//
+// Flag generation logic
+//
+
+macro_rules! flags {
+    ($($opt:expr),* $(,)?) => {{
+        let mut v = vec![$($opt.as_ref().map(|v| v.as_str()).unwrap_or(""),)*];
+        v.retain(|s| !s.is_empty());
+        v.join(" ")
+    }};
+}
+
+impl CompilerTool {
+    pub fn to_flags(&self, cfg: &Configuration) -> String {
+        let Self {
+            additional_options,
+            optimization,
+            inline_function_expansion,
+            enable_intrinsic_functions,
+            omit_frame_pointers,
+            enable_fiber_safe_optimizations,
+            favor_size_or_speed,
+            whole_program_optimization,
+            string_pooling,
+            exception_handling,
+            runtime_library,
+            buffer_security_check,
+            enable_enhanced_instruction_set,
+            floating_point_model,
+            warning_level,
+            debug_information_format,
+            use_precompiled_header,
+            compile_as,
+            runtime_type_info,
+            minimal_rebuild,
+            basic_runtime_checks,
+            enable_function_level_linking,
+            smaller_type_check,
+            browse_information,
+            calling_convention,
+            floating_point_exceptions,
+            force_conformance_in_for_loop_scope,
+            generate_preprocessed_file,
+            show_includes,
+            struct_member_alignment,
+            suppress_startup_banner,
+            detect_64_bit_portability_problems,
+            //
+            object_file: _,
+            program_data_base_file_name: _,
+            assembler_listing_location: _,
+            precompiled_header_through,
+            precompiled_header_file: _,
+            disable_specific_warnings: _,
+            additional_include_directories: _,
+            preprocessor_definitions: _,
+        } = self;
+
+        //
+        //
+
+        let whole_program_optimization =
+            match (cfg.whole_program_optimization, whole_program_optimization) {
+                (Some(true), None) => Some(WholeProgramOptimization::_1),
+                _ => *whole_program_optimization,
+            };
+
+        let generate_program_database = match debug_information_format {
+            Some(DebugInformationFormat::_0) | None => None,
+            _ => Some(GenerateProgramDatabase::_1),
+        };
+
+        let compile_only = Some(CompileOnly::_1);
+
+        // TODO: `compile_as` is a bit more complex.
+        // If there are C++ and C files, it will emit two calls (verify!) to the compiler
+        // This is important for dependencies
+        let compile_as = match compile_as {
+            None => Some(CompileAs::_2),
+            _ => *compile_as,
+        };
+
+        // TODO: I'd rather we verified that while parsing.
+        let use_precompiled_header = match (use_precompiled_header, precompiled_header_through) {
+            (Some(use_precompiled_header), Some(precompiled_header_through)) => {
+                let mut flag = use_precompiled_header.as_str().to_string();
+                flag.push('"');
+                flag.push_str(precompiled_header_through);
+                flag.push('"');
+                Some(flag)
+            }
+            _ => use_precompiled_header.map(|flag| flag.as_str().to_string()),
+        };
+
+        //
+        //
+
+        let mut result = flags![
+            optimization,
+            inline_function_expansion,
+            enable_intrinsic_functions,
+            omit_frame_pointers,
+            enable_fiber_safe_optimizations,
+            favor_size_or_speed,
+            whole_program_optimization,
+            string_pooling,
+            generate_program_database,
+            exception_handling,
+            runtime_library,
+            buffer_security_check,
+            enable_enhanced_instruction_set,
+            floating_point_model,
+            use_precompiled_header,
+            warning_level,
+            compile_only,
+            debug_information_format,
+            compile_as,
+            runtime_type_info,
+            minimal_rebuild,
+            basic_runtime_checks,
+            enable_function_level_linking,
+            smaller_type_check,
+            browse_information,
+            calling_convention,
+            floating_point_exceptions,
+            force_conformance_in_for_loop_scope,
+            generate_preprocessed_file,
+            show_includes,
+            struct_member_alignment,
+            suppress_startup_banner,
+            detect_64_bit_portability_problems,
+        ];
+
+        for disable_specific_warning in self.disable_specific_warnings.iter().flatten() {
+            result.push(' ');
+            result.push_str("/wd");
+            result.push_str(&disable_specific_warning);
+        }
+
+        // @TODO: Requires correctly handling overrides.
+        if let Some(additional_options) = additional_options
+            && !additional_options.is_empty()
+        {
+            result.push(' ');
+            result.push_str(additional_options);
+        }
+
+        result
     }
 }
 
@@ -382,8 +908,7 @@ impl FileConfiguration {
 
         this.tool = node
             .children()
-            .filter(|n| n.is_element() && n.tag_name().name() == "Tool")
-            .next()
+            .find(|n| n.is_element() && n.tag_name().name() == "Tool")
             .context("FileConfiguration missing Tool")
             .and_then(Tool::parse_xml)?;
 
