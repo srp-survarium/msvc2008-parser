@@ -74,7 +74,7 @@ pub struct ProjectConfigurationPlatforms {
 pub struct ProjectConfigurationPlatform {
     pub uuid: Uuid,
     pub target_cfg: ConfigurationPlatform,
-    pub cfg: ConfigurationPlatform,
+    pub actual_cfg: ConfigurationPlatform,
     pub is_enabled: bool,
 }
 
@@ -95,10 +95,7 @@ pub struct NestedProject {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ConfigurationPlatform {
-    pub build_kind: String,
-    pub platform_name: String,
-}
+pub struct ConfigurationPlatform(pub String);
 
 impl Sln {
     pub fn find_project_dependencies(&self, project_name: &str) -> Option<Vec<&Project>> {
@@ -321,13 +318,13 @@ impl ProjectConfigurationPlatform {
         let (i, _) = char('.').parse(i)?;
         let (i, _) = tag("ActiveCfg").parse(i)?;
         let (i, _) = charsep('=').parse(i)?;
-        let (i, cfg) = ConfigurationPlatform::parse(i)?;
+        let (i, actual_cfg) = ConfigurationPlatform::parse(i)?;
         let (i, _) = sp(i)?;
 
         let mut this = Self {
             uuid,
             target_cfg,
-            cfg,
+            actual_cfg,
             is_enabled: false,
         };
 
@@ -350,7 +347,7 @@ impl ProjectConfigurationPlatform {
 
             assert_eq!(self.uuid, uuid);
             assert_eq!(self.target_cfg, target_cfg);
-            assert_eq!(self.cfg, cfg);
+            assert_eq!(self.actual_cfg, cfg);
 
             Ok((i, ()))
         }
@@ -363,13 +360,7 @@ impl ConfigurationPlatform {
         let (i, platform_name) = Self::take_until1_platform_sep(i)?;
         let (i, _) = sp(i)?;
 
-        Ok((
-            i,
-            Self {
-                build_kind: build_kind.to_string(),
-                platform_name: platform_name.to_string(),
-            },
-        ))
+        Ok((i, Self(format!("{build_kind}|{platform_name}"))))
     }
 
     fn take_until1_platform_sep(i: &str) -> nom::IResult<&str, &str> {
@@ -537,8 +528,9 @@ EndProject
         let (i, conf) = SolutionConfigurationPlatform::parse(input).unwrap();
 
         assert_eq!(i, "");
-        assert_eq!(conf.platform.build_kind, "Master Gold");
-        assert_eq!(conf.platform.platform_name, "Win32");
+        assert_eq!(conf.platform.0, "Master Gold|Win32");
+        // assert_eq!(conf.platform.build_kind, "Master Gold");
+        // assert_eq!(conf.platform.platform_name, "Win32");
     }
 
     #[test]
@@ -563,7 +555,7 @@ EndProject
 
     #[test]
     fn parses_sln() {
-        const SLN: &str = include_str!("../resources/vostok.sln");
+        const SLN: &str = include_str!("../../../resources/vostok.sln");
 
         let (i, _sln) = Sln::parse(SLN).unwrap();
         assert_eq!(i, "");

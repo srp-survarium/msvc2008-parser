@@ -7,7 +7,7 @@ pub struct VCProject {
     pub project_type: String,
     pub version: String,
     #[rename("ProjectGUID")]
-    pub guid: String,
+    pub guid: uuid::Uuid,
     pub root_namespace: String,
     pub keyword: Option<String>, // TODO: freeimage\LibOpenJPEG\LibOpenJPEG.vcproj
     pub target_framework_version: String,
@@ -686,7 +686,9 @@ impl CompilerTool {
 
         // TODO: I'd rather we verified that while parsing.
         let use_precompiled_header = match (use_precompiled_header, precompiled_header_through) {
-            (Some(use_precompiled_header), Some(precompiled_header_through)) => {
+            (Some(use_precompiled_header), Some(precompiled_header_through))
+                if !matches!(*use_precompiled_header, UsePrecompiledHeader::_0) =>
+            {
                 let mut flag = use_precompiled_header.as_str().to_string();
                 flag.push('"');
                 flag.push_str(precompiled_header_through);

@@ -17,12 +17,17 @@ pub struct Cli {
     /// Project to build.
     #[arg(long)]
     pub project_name: String,
+
+    /// Configuration to build project with
+    #[arg(long)]
+    pub configuration_platform: String,
 }
 
 fn main() -> anyhow::Result<()> {
     let Cli {
         sln_path,
         project_name,
+        configuration_platform,
     } = Cli::parse();
     let sln = std::fs::read_to_string(&sln_path)?;
     let sln = match sln::Sln::parse(&sln) {
@@ -54,22 +59,45 @@ fn main() -> anyhow::Result<()> {
         }
 
         let vcproj = std::fs::read_to_string(&project_path)?;
-        let mut vcproj = vcproj::VCProject::parse_xml(&vcproj)
+        let vcproj = vcproj::VCProject::parse_xml(&vcproj)
             .with_context(|| format!("Failed parsing '{}' at '{}'", dep.name, dep.path))?;
 
-        vcproj
+        let cfg_platform = sln
+            .global
+            .cfg_platforms
+            .platforms
+            .iter()
+            .find(|cfg| cfg.uuid == vcproj.guid && cfg.target_cfg.0 == configuration_platform)
+            .with_context(|| {
+                format!(
+                    "Failed find related config '{}' of '{configuration_platform}'",
+                    dep.name
+                )
+            })?;
+
+        let build_cfg = vcproj
             .configurations
-            .retain(|config| config.name == "Release|Win32" || config.name == "Master Gold|Win32");
-        vcproj.platforms = Default::default();
-        vcproj.files = vcproj::Files::default();
+            .iter()
+            .find(|cfg| cfg.name == cfg_platform.actual_cfg.0)
+            .with_context(|| {
+                format!(
+                    "Failed find related config '{}' of '{}'",
+                    dep.name, cfg_platform.actual_cfg.0
+                )
+            })?;
 
-        for cfg in vcproj.configurations {
-            if let Some(cl) = &cfg.compiler_tool {
-                println!("[{}] [{}]: {}", vcproj.name, cfg.name, cl.to_flags(&cfg));
-            }
+        if !cfg_platform.is_enabled {
+            println!("[{}] [{}]: <disabled>", vcproj.name, build_cfg.name);
+        } else if let Some(cl) = &build_cfg.compiler_tool {
+            println!(
+                "[{}] [{}]: {}",
+                vcproj.name,
+                build_cfg.name,
+                cl.to_flags(&build_cfg)
+            );
+        } else {
+            println!("[{}] [{}]: <nocomptool>", vcproj.name, build_cfg.name);
         }
-
-        // println!("[{}]\n {}\n", vcproj.name, skip_nones(&vcproj));
     }
 
     Ok(())
