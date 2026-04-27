@@ -20,6 +20,15 @@ pub struct VCProject {
     pub files: Files,
 }
 
+// TODO: DisableSpecificWarnings can be on files as well:
+//
+// [zlibN][Release|Win32]: /Ob2 /Oi /Ot /Oy /GT /GL /FD /MD /GS- /arch:SSE /fp:fast /W3 /c /Zi /TP /MP       | my
+// [zlibN][Release|Win32]: /Ob2 /Oi /Ot /Oy /GT /GL /FD /MD /GS- /arch:SSE /fp:fast /W3 /c /Zi /TC /wd4996  /MP
+// [zlib][Release|Win32]: /O2 /Ob2 /Oi /Ot /Oy /GT /GL /FD /MT /GS- /arch:SSE /fp:fast /W3 /c /Zi /TP /MP    | my
+// [zlib][Release|Win32]: /O2 /Ob2 /Oi /Ot /Oy /GT /GL /FD /MT /GS- /arch:SSE /fp:fast /W3 /c /Zi /TC /wd4996  /MP
+// [LibTIFF][Release|Win32]: /O2 /Ob2 /Oi /Ot /Oy /GT /GL /GF /FD /MT /GS- /arch:SSE /fp:fast /W3 /c /Zi /MP | my
+// [LibTIFF][Release|Win32]: /O2 /Ob2 /Oi /Ot /Oy /GT /GL /GF /FD /MT /GS- /arch:SSE /fp:fast /W3 /c /Zi /wd4996  /MP
+
 #[derive(Debug, ParseXml)]
 pub struct Configuration {
     pub name: String,
@@ -391,7 +400,7 @@ flag_enum! {
 flag_enum! {
     enum RuntimeTypeInfo {
         false => "/GR-",
-        true => "/GR",
+        true => "", // VS2008 doesn't emit it, since it is the default
     }
 }
 flag_enum! {
@@ -420,8 +429,8 @@ flag_enum! {
 }
 flag_enum! {
     enum ForceConformanceInForLoopScope {
-        false => "",
-        true => "/Zc:forScope",
+        false => "/Zc:forScope-",
+        true => "", // VS2008 doesn't emit it, since it is the default
     }
 }
 flag_enum! {
@@ -695,8 +704,15 @@ impl CompilerTool {
                 flag.push('"');
                 Some(flag)
             }
-            _ => use_precompiled_header.map(|flag| flag.as_str().to_string()),
+            _ => None,
         };
+
+        // TODO: default option
+        let exception_handling = Some(
+            exception_handling
+                .as_ref()
+                .unwrap_or(&ExceptionHandling::_1),
+        );
 
         //
         //
@@ -705,9 +721,9 @@ impl CompilerTool {
             optimization,
             inline_function_expansion,
             enable_intrinsic_functions,
+            favor_size_or_speed,
             omit_frame_pointers,
             enable_fiber_safe_optimizations,
-            favor_size_or_speed,
             whole_program_optimization,
             string_pooling,
             generate_program_database,
@@ -715,25 +731,24 @@ impl CompilerTool {
             runtime_library,
             buffer_security_check,
             enable_enhanced_instruction_set,
+            enable_function_level_linking,
             floating_point_model,
+            runtime_type_info,
             use_precompiled_header,
             warning_level,
             compile_only,
             debug_information_format,
-            compile_as,
-            runtime_type_info,
             minimal_rebuild,
             basic_runtime_checks,
-            enable_function_level_linking,
             smaller_type_check,
             browse_information,
             calling_convention,
+            compile_as,
             floating_point_exceptions,
             force_conformance_in_for_loop_scope,
             generate_preprocessed_file,
             show_includes,
             struct_member_alignment,
-            suppress_startup_banner,
             detect_64_bit_portability_problems,
         ];
 
@@ -748,7 +763,13 @@ impl CompilerTool {
             && !additional_options.is_empty()
         {
             result.push(' ');
+            result.push(' ');
             result.push_str(additional_options);
+        }
+
+        for flag in suppress_startup_banner.iter() {
+            result.push(' ');
+            result.push_str(flag.as_str());
         }
 
         result
@@ -978,7 +999,7 @@ fn parse_bool(s: &str) -> anyhow::Result<bool> {
 }
 
 fn parse_list(s: &str) -> Vec<String> {
-    s.split(';')
+    s.split([';', ','])
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect()
