@@ -1,12 +1,26 @@
-[package]
-name = "msvc2008-parser"
+[workspace]
+resolver = "3"
+members = [
+  "crates/msvc2008-parser-proc",
+  "crates/msvc2008-parser-lib",
+  "crates/msvc2008-parser-bin",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.5.41", features = ["derive", "env"] }
 nom = "8.0.0"
-sha1 = "0.11.0"
-uuid = {
-  version = "1.23.1",
-  features = ["v4"],
-}
+roxmltree = "0.21.1"
+uuid = { version = "1.23.1", features = ["v4"] }
+
+proc-macro2 = "1.0.106"
+quote = "1.0.45"
+syn = { version = "2.0.117", features = ["full"] }
+
+msvc2008-parser-proc = { path = "./crates/msvc2008-parser-proc" }
+msvc2008-parser-lib = { path = "./crates/msvc2008-parser-lib" }
+msvc2008-parser-bin = { path = "./crates/msvc2008-parser-bin" }
